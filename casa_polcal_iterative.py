@@ -31,7 +31,7 @@ target = 'CasA'
 ref_ant = '40'
 pol_spw = '0:50~167'              # Measurement set should have only one spectral window, 
                                   # use to constrain bandpass used for polcal
-obs_vis = 'CasA_polcal.ms'
+obs_vis = 'CasA_obs.ms'
 # obs_vis = '3c286_obs.ms'
 
 use_3c286 = True
@@ -419,6 +419,15 @@ tclean(vis=obs_vis, weighting='briggs', robust=0, imagename=f"{image_base}_clean
 obs_vis = f"{target}_calibrated.ms"
 os.makedirs(f"./IMAGES/{target}/")
 image_base = f'IMAGES/{target}/{target}_briggs0_{round(cell, 2)}arcsec'
+
+
+tclean(vis=f'{target}_calibrated.ms', imagename=f"{image_base}_dirty", spw='0', specmode='mfs', deconvolver='mtmfs', 
+        gridder='standard', imsize=[2048,2048], cell=f"{cell}arcsec", weighting='briggs', niter=100, interactive=False)
+
+tclean(vis=f'{target}_calibrated.ms', imagename=f'{image_base}_clean_iter_1000', spw='0', specmode='mfs', deconvolver='mtmfs', 
+       gridder='standard', imsize=[2048,2048], cell=f"{cell}arcsec", weighting='briggs', niter=1000, interactive=True)
+
+
 
 
 
