@@ -367,71 +367,89 @@ if iterate_calibration:
 
 
 ### Imaging
+do_image = True
 
-# Split out bcal, pcal, target
-mstransform(vis=obs_vis, outputvis=f"{bcal}_calibrated.ms", antenna='!*&&&', field=bcal, datacolumn='corrected')
-mstransform(vis=obs_vis, outputvis=f"{pcal}_calibrated.ms", antenna='!*&&&', field=pcal, datacolumn='corrected')
-mstransform(vis=obs_vis, outputvis=f"{target}_calibrated.ms", antenna='!*&&&', field=target, datacolumn='corrected')
+if do_image:
+        # Split out bcal, pcal, target
+        mstransform(vis=f'{tab_name}_pol_cal.ms', outputvis=f"{bcal}_calibrated.ms", antenna='!*&&&', field=bcal, datacolumn='DATA')
+        mstransform(vis=f'{tab_name}_pol_cal.ms', outputvis=f"{pcal}_calibrated.ms", antenna='!*&&&', field=pcal, datacolumn='DATA')
+        mstransform(vis=f'{tab_name}_pol_cal.ms', outputvis=f"{target}_calibrated.ms", antenna='!*&&&', field=target, datacolumn='DATA')
 
-# Get maximum baseline
-tb.open(obs_vis)
-B_max = np.max(np.sqrt(tb.getcol('UVW')[0]**2 + tb.getcol('UVW')[1]**2 + tb.getcol('UVW')[2]**2))
-tb.close()
+        # Get maximum baseline
+        tb.open(obs_vis)
+        B_max = np.max(np.sqrt(tb.getcol('UVW')[0]**2 + tb.getcol('UVW')[1]**2 + tb.getcol('UVW')[2]**2))
+        tb.close()
 
-# Get maximum frequency
-tb.open(f"{obs_vis}/SPECTRAL_WINDOW/")
-nu_max = np.max(tb.getcol('REF_FREQUENCY'))
-tb.close()
+        # Get maximum frequency
+        tb.open(f"{obs_vis}/SPECTRAL_WINDOW/")
+        nu_max = np.max(tb.getcol('REF_FREQUENCY'))
+        tb.close()
 
-# Calculate cell size
-cell = ((3.e8 / nu_max) / B_max) * (180. / np.pi) * 3600. / 8.
+        # Calculate cell size
+        cell = ((3.e8 / nu_max) / B_max) * (180. / np.pi) * 3600. / 8.
 
-# Image bandpass calibrator
-obs_vis = f"{bcal}_calibrated.ms"
-os.makedirs(f"./IMAGES/{bcal}/")
+        # Image bandpass calibrator
+        obs_vis = f"{bcal}_calibrated.ms"
+        os.makedirs(f"./IMAGES/{bcal}/")
 
-image_base = f'IMAGES/{bcal}/{bcal}_briggs0_{round(cell, 2)}arcsec'
+        image_base = f'IMAGES/{bcal}/{bcal}_briggs0_{round(cell, 2)}arcsec'
 
-tclean(vis=obs_vis, weighting='briggs', robust=0, imagename=f"{image_base}_dirty", 
-       cell=f"{cell}arcsec", imsize=[2048,2048], pblimit=-1, deconvolver='mtmfs')
-dirty_rms = imstat(f"{image_base}_dirty.image.tt0")['rms'][0]
-tclean(vis=obs_vis, weighting='briggs', robust=0, imagename=f"{image_base}_clean_iter1", cell=f"{cell}arcsec", 
-       imsize=[2048,2048], niter=1000, threshold = f"{dirty_rms*5.}Jy", pblimit=-1, deconvolver='mtmfs')
-clean_rms = imstat(f"{image_base}_clean_iter1.residual.tt0")['rms'][0]
-tclean(vis=obs_vis, weighting='briggs', robust=0, imagename=f"{image_base}_clean_iter2", 
-       cell=f"{cell}arcsec", imsize=[2048,2048], niter=1000, threshold = f"{clean_rms*5.}Jy", pblimit=-1,deconvolver='mtmfs')
+        tclean(vis=obs_vis, weighting='briggs', robust=0, imagename=f"{image_base}_dirty", 
+        cell=f"{cell}arcsec", imsize=[2048,2048], pblimit=-1, deconvolver='mtmfs')
+        dirty_rms = imstat(f"{image_base}_dirty.image.tt0")['rms'][0]
+        tclean(vis=obs_vis, weighting='briggs', robust=0, imagename=f"{image_base}_clean_iter1", cell=f"{cell}arcsec", 
+        imsize=[2048,2048], niter=1000, threshold = f"{dirty_rms*5.}Jy", pblimit=-1, deconvolver='mtmfs')
+        clean_rms = imstat(f"{image_base}_clean_iter1.residual.tt0")['rms'][0]
+        tclean(vis=obs_vis, weighting='briggs', robust=0, imagename=f"{image_base}_clean_iter2", 
+        cell=f"{cell}arcsec", imsize=[2048,2048], niter=1000, threshold = f"{clean_rms*5.}Jy", pblimit=-1,deconvolver='mtmfs')
 
-# Image phase/polarization calibrator (SPLIT OUT PHASE CAL)
-obs_vis = f"{pcal}_calibrated.ms"
-os.makedirs(f"./IMAGES/{pcal}/")
-image_base = f'IMAGES/{pcal}/{pcal}_briggs0_{round(cell, 2)}arcsec'
+        # Image phase/polarization calibrator (SPLIT OUT PHASE CAL)
+        obs_vis = f"{pcal}_calibrated.ms"
+        os.makedirs(f"./IMAGES/{pcal}/")
+        image_base = f'IMAGES/{pcal}/{pcal}_briggs0_{round(cell, 2)}arcsec'
 
-tclean(vis=obs_vis, weighting='briggs', robust=0, imagename=f"{image_base}_dirty", 
-       cell=f"{cell}arcsec", imsize=[2048,2048], pblimit=-1, deconvolver='mtmfs')
-dirty_rms = imstat(f"{image_base}_dirty.image.tt0")['rms'][0]
-tclean(vis=obs_vis, weighting='briggs', robust=0, imagename=f"{image_base}_clean_iter1", cell=f"{cell}arcsec", 
-       imsize=[2048,2048], niter=1000, threshold = f"{dirty_rms*5.}Jy", pblimit=-1, deconvolver='mtmfs')
-clean_rms = imstat(f"{image_base}_clean_iter1.residual.tt0")['rms'][0]
-tclean(vis=obs_vis, weighting='briggs', robust=0, imagename=f"{image_base}_clean_iter2", 
-       cell=f"{cell}arcsec", imsize=[2048,2048], niter=1000, threshold = f"{clean_rms*5.}Jy", pblimit=-1,deconvolver='mtmfs')
+        tclean(vis=obs_vis, weighting='briggs', robust=0, imagename=f"{image_base}_dirty", 
+        cell=f"{cell}arcsec", imsize=[2048,2048], pblimit=-1, deconvolver='mtmfs')
+        dirty_rms = imstat(f"{image_base}_dirty.image.tt0")['rms'][0]
+        tclean(vis=obs_vis, weighting='briggs', robust=0, imagename=f"{image_base}_clean_iter1", cell=f"{cell}arcsec", 
+        imsize=[2048,2048], niter=1000, threshold = f"{dirty_rms*5.}Jy", pblimit=-1, deconvolver='mtmfs')
+        clean_rms = imstat(f"{image_base}_clean_iter1.residual.tt0")['rms'][0]
+        tclean(vis=obs_vis, weighting='briggs', robust=0, imagename=f"{image_base}_clean_iter2", 
+        cell=f"{cell}arcsec", imsize=[2048,2048], niter=1000, threshold = f"{clean_rms*5.}Jy", pblimit=-1,deconvolver='mtmfs')
 
-# Image target (SPLIT OUT ONLY TARGET DATA)
-obs_vis = f"{target}_calibrated.ms"
-os.makedirs(f"./IMAGES/{target}/")
-image_base = f'IMAGES/{target}/{target}_briggs0_{round(cell, 2)}arcsec'
+        # Image target (SPLIT OUT ONLY TARGET DATA)
+        obs_vis = f"{target}_calibrated.ms"
+        os.makedirs(f"./IMAGES/{target}/")
+        image_base = f'IMAGES/{target}/{target}_briggs0_{round(cell, 2)}arcsec'
+
+        print("Stokes I Image")
+        tclean(vis=f'{target}_calibrated.ms', imagename=f"{image_base}_dirty", spw='0', specmode='mfs', deconvolver='mtmfs', 
+                gridder='standard', imsize=[2048,2048], cell=f"{cell}arcsec", weighting='briggs', niter=100)
+        tclean(vis=f'{target}_calibrated.ms', imagename=f'{image_base}_clean_iter_1000', spw='0', specmode='mfs', deconvolver='mtmfs', 
+        gridder='standard', imsize=[2048,2048], cell=f"{cell}arcsec", weighting='briggs', niter=1000)
+
+        print("Stokes Q Image")
+        tclean(vis=f'{target}_calibrated.ms', imagename=f"{image_base}_Q_dirty", spw='0', specmode='mfs', deconvolver='mtmfs', 
+                gridder='standard', imsize=[2048,2048], cell=f"{cell}arcsec", weighting='briggs', niter=100, stokes='Q')
+        tclean(vis=f'{target}_calibrated.ms', imagename=f'{image_base}_Q_clean_iter_1000', spw='0', specmode='mfs', deconvolver='mtmfs', 
+        gridder='standard', imsize=[2048,2048], cell=f"{cell}arcsec", weighting='briggs', niter=1000, stokes='Q')
+
+        print("Stokes U Image")
+        tclean(vis=f'{target}_calibrated.ms', imagename=f"{image_base}_U_dirty", spw='0', specmode='mfs', deconvolver='mtmfs', 
+                gridder='standard', imsize=[2048,2048], cell=f"{cell}arcsec", weighting='briggs', niter=100, stokes='U')
+        tclean(vis=f'{target}_calibrated.ms', imagename=f'{image_base}_U_clean_iter_1000', spw='0', specmode='mfs', deconvolver='mtmfs', 
+        gridder='standard', imsize=[2048,2048], cell=f"{cell}arcsec", weighting='briggs', niter=1000, stokes='U')
+
+        print("Stokes V Image")
+        tclean(vis=f'{target}_calibrated.ms', imagename=f"{image_base}_V_dirty", spw='0', specmode='mfs', deconvolver='mtmfs', 
+                gridder='standard', imsize=[2048,2048], cell=f"{cell}arcsec", weighting='briggs', niter=100, stokes='U')
+        tclean(vis=f'{target}_calibrated.ms', imagename=f'{image_base}_V_clean_iter_1000', spw='0', specmode='mfs', deconvolver='mtmfs', 
+        gridder='standard', imsize=[2048,2048], cell=f"{cell}arcsec", weighting='briggs', niter=1000, stokes='U')
 
 
-tclean(vis=f'{target}_calibrated.ms', imagename=f"{image_base}_dirty", spw='0', specmode='mfs', deconvolver='mtmfs', 
-        gridder='standard', imsize=[2048,2048], cell=f"{cell}arcsec", weighting='briggs', niter=100, interactive=False)
-
-tclean(vis=f'{target}_calibrated.ms', imagename=f'{image_base}_clean_iter_1000', spw='0', specmode='mfs', deconvolver='mtmfs', 
-       gridder='standard', imsize=[2048,2048], cell=f"{cell}arcsec", weighting='briggs', niter=1000, interactive=True)
 
 
 
+        # Produce Stokes maps
 
-
-
-# Produce Stokes maps
-
-##############################################################################################################
+        ##############################################################################################################
