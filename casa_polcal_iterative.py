@@ -5,7 +5,6 @@
 # This script should be run using CASA 6.4.0.16 or higher
 
 # TODO:
-# Add in calculations of XX/YY crossing for polcalib
 # Add in provision for length of polcalib scans?
 # Stokes maps
 # Imaging
@@ -217,10 +216,31 @@ if use_3c286:
 else:
         # Set flux model for phase calibrator
         setjy(vis=obs_vis, field=pcal, standard='Perley-Butler 2017', usescratch=True)
+
+        ##################################################
+        # Best scan to calibrate cross-hands will be where the polarization signal is 
+        # minimum in XX and YY (i.e., maximum in XY and YX); find the scan using the
+        # gain calibration for the phase/polarization calibrator
+        # This code taken from ALMA pipeline
+        tb.open(f'{tab_name}.G3')
+        scans = tb.getcol('SCAN_NUMBER')
+        gains = np.squeeze(tb.getcol('CPARAM'))
+        tb.close()
+        scan_list = np.array(list(set(scans)))
+        ratios = np.zeros(len(scan_list))
+        for si, s in enumerate(scan_list):
+                filt = scans == s
+                ratio = np.sqrt(np.average(np.power(np.abs(gains[0,filt])/np.abs(gains[1,filt])-1.0,2.)))
+                ratios[si] = ratio
+
+        best_scan_index = np.argmin(ratios)
+        best_scan = scan_list[best_scan_index]
+        print(f"Scan with highest expected X-Y signal: {best_scan}")
+        #####################################################
         
         # Kcross
         gaincal(vis=obs_vis, caltable=f'{tab_name}_pol.Kcross0', spw='0', refant=ref_ant, solint='inf', 
-               field=pcal, gaintype='KCROSS', combine='scan', smodel=[1, 0, 1, 0], calmode='ap', 
+               field=pcal, gaintype='KCROSS', scan=best_scan, smodel=[1, 0, 1, 0], calmode='ap', 
                minblperant=1, refantmode='strict', parang=True)
 
         if generate_plots:
@@ -442,9 +462,9 @@ if do_image:
 
         print("Stokes V Image")
         tclean(vis=f'{target}_calibrated.ms', imagename=f"{image_base}_V_dirty", spw='0', specmode='mfs', deconvolver='mtmfs', 
-                gridder='standard', imsize=[2048,2048], cell=f"{cell}arcsec", weighting='briggs', niter=100, stokes='U')
+                gridder='standard', imsize=[2048,2048], cell=f"{cell}arcsec", weighting='briggs', niter=100, stokes='V')
         tclean(vis=f'{target}_calibrated.ms', imagename=f'{image_base}_V_clean_iter_1000', spw='0', specmode='mfs', deconvolver='mtmfs', 
-        gridder='standard', imsize=[2048,2048], cell=f"{cell}arcsec", weighting='briggs', niter=1000, stokes='U')
+        gridder='standard', imsize=[2048,2048], cell=f"{cell}arcsec", weighting='briggs', niter=1000, stokes='V')
 
 
 
