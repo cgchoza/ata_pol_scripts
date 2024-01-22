@@ -427,6 +427,32 @@ if do_image:
         tclean(vis=obs_vis, weighting='briggs', robust=0, imagename=f"{image_base}_clean_iter2", 
         cell=f"{cell}arcsec", imsize=[2048,2048], niter=1000, threshold = f"{clean_rms*5.}Jy", pblimit=-1,deconvolver='mtmfs')
 
+        ia.open(f'{image_base}_clean_iter2.image.tt0')
+        maj = ia.restoringbeam()['major']['value']
+        min = ia.restoringbeam()['minor']['value']
+        pos = ia.restoringbeam()['positionangle']['value']
+        ia.close()
+
+        fit_name = f'./IMAGES/{bcal}/fitting_region.crtf'
+        f = open(fit_name, 'w')
+        f.write('#CRTF\n')
+        f.write(f'circle[[1024pix, 1024pix],{cell * 8. * 5.}arcsec]')
+        f.close()
+
+        est_name = f'./IMAGES/{bcal}/estimates.txt'
+        f = open(est_name, 'w')
+        f.write(f'1,1024,1024,{maj}arcsec,{min}arcsec,{pos}deg,abp')
+        f.close()
+
+        fit_results = imfit(imagename=f'{image_base}_clean_iter2.image.tt0', region=fit_name, estimates=est_name)
+        flux_density = fit_results['deconvolved']['component0']['flux']['value'][0]
+        error = fit_results['deconvolved']['component0']['flux']['error'][0]
+
+        fname = './IMAGES/' + bpcal + '/' + 'fitting_results.txt'
+        f = open(fname, 'w')
+        f.write(str(flux_density) + ',' + str(error))
+        f.close()
+
         # Image phase/polarization calibrator (SPLIT OUT PHASE CAL)
         obs_vis = f"{pcal}_calibrated.ms"
         os.makedirs(f"./IMAGES/{pcal}/")
