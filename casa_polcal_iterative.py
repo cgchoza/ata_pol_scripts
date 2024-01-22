@@ -135,10 +135,14 @@ else:
         
         # Calculate Stokes model from gains
         qu_model = polfromgain(vis=obs_vis, tablein=f'{tab_name}.G3')
+        print(f"Stokes model calculated from gains: {qu_model}")
 
         # Redo gaincal with Stokes model; this does not absorb polarization signal
         gaincal(vis=obs_vis, caltable=f'{tab_name}_pol.G3', refant=ref_ant, refantmode='strict', solint='300', calmode='ap', 
                 field=pcal, smodel=qu_model[pcal]['Spw0'], parang=True, gaintable=[f'{tab_name}.K0', f'{tab_name}.B0', f'{tab_name}.G2'])
+        
+        # Redo Stokes model to check for residual gains; should be close to zero
+        qu_model_calibrated = polfromgain(vis=obs_vis, tablein=f'{tab_name}_pol.G3')
 
         if generate_plots:
                 # For bandpass calibrator, gain amplitude and phase
