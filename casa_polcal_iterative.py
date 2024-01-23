@@ -7,9 +7,7 @@
 # TODO:
 # Add in provision for length of polcalib scans?
 # Stokes maps
-# Imaging
 # Fluxscale?
-# Add in diagnostic stuff from Joe's script
 
 #############################
 
@@ -20,20 +18,50 @@ import glob
 import subprocess
 import numpy as np
 
+
+def calibrator_diagnostics(calibrator, image_base, cell_size):
+        ia.open(f'{image_base}_clean_iter2.image.tt0')
+        maj = ia.restoringbeam()['major']['value']
+        min = ia.restoringbeam()['minor']['value']
+        pos = ia.restoringbeam()['positionangle']['value']
+        ia.close()
+
+
+        fit_name = f'./IMAGES/{calibrator}/fitting_region.crtf'
+        f = open(fit_name, 'w')
+        f.write('#CRTF\n')
+        f.write(f'circle[[1024pix, 1024pix],{cell_size * 8. * 5.}arcsec]')
+        f.close()
+
+        est_name = f'./IMAGES/{calibrator}/estimates.txt'
+        f = open(est_name, 'w')
+        f.write(f'1,1024,1024,{maj}arcsec,{min}arcsec,{pos}deg,abp')
+        f.close()
+
+        fit_results = imfit(imagename=f'{image_base}_clean_iter2.image.tt0', region=fit_name, estimates=est_name)
+        flux_density = fit_results['deconvolved']['component0']['flux']['value'][0]
+        error = fit_results['deconvolved']['component0']['flux']['error'][0]
+
+        fit_result_name = f'./IMAGES/{calibrator}/fitting_results.txt'
+        f = open(fit_result_name, 'w')
+        f.write(str(flux_density) + ',' + str(error))
+        f.close()
+
 # Fields for user to edit per-observation
-bcal = '3c147'
-pcal = '2343+538'
-target = 'CasA'
-# bcal = '3c286'
-# pcal = '3c286'
-# target = '3c286'
+# bcal = '3c147'
+# pcal = '2343+538'
+# target = 'CasA'
+bcal = '3c286'
+pcal = '3c286'
+target = '3c286'
 ref_ant = '40'
+spw = '0:50~167'
 pol_spw = '0:50~167'              # Measurement set should have only one spectral window, 
                                   # use to constrain bandpass used for polcal
-obs_vis = 'CasA_obs.ms'
-# obs_vis = '3c286_obs.ms'
+# obs_vis = 'CasA_obs.ms'
+obs_vis = '3c286_obs.ms'
 
-use_3c286 = True
+use_3c286 = False
 generate_plots = True
 iterate_calibration = False
 
@@ -64,9 +92,9 @@ listobs(vis=obs_vis)
 
 # Preliminary gaincal
 # This will be thrown away after solving for delay and bandpass
-gaincal(vis=obs_vis, caltable=f'{tab_name}.G0', field=bcal, spw='0', refant=ref_ant, refantmode='strict', calmode='p', 
+gaincal(vis=obs_vis, caltable=f'{tab_name}.G0', field=bcal, spw=spw, refant=ref_ant, refantmode='strict', calmode='p', 
         solint='inf', parang=True)
-gaincal(vis=obs_vis, caltable=f'{tab_name}.G1', field=bcal, spw='0', refant=ref_ant, refantmode='strict', calmode='a', 
+gaincal(vis=obs_vis, caltable=f'{tab_name}.G1', field=bcal, spw=spw, refant=ref_ant, refantmode='strict', calmode='a', 
         solint='100', preavg=1, minblperant=1, minsnr=0, gaintype='G', gaintable=[f'{tab_name}.G0'], parang=True)
 
 if generate_plots:
@@ -130,7 +158,7 @@ if use_3c286:
 else:
         # If using phase calibrator for polarization calibration, we allow the gains to absorb the parallactic angle 
         # variation so that we can use it to calculate the pcal Stokes model
-        gaincal(vis=obs_vis, caltable=f'{tab_name}.G3', field=pcal, spw='0', refant=ref_ant, calmode='ap', solint='300', 
+        gaincal(vis=obs_vis, caltable=f'{tab_name}.G3', field=pcal, spw=spw, refant=ref_ant, calmode='ap', solint='300', 
                 gaintable=[f'{tab_name}.K0', f'{tab_name}.B0', f'{tab_name}.G2'])
         
         # Calculate Stokes model from gains
@@ -138,11 +166,12 @@ else:
         print(f"Stokes model calculated from gains: {qu_model}")
 
         # Redo gaincal with Stokes model; this does not absorb polarization signal
-        gaincal(vis=obs_vis, caltable=f'{tab_name}_pol.G3', refant=ref_ant, refantmode='strict', solint='300', calmode='ap', 
+        gaincal(vis=obs_vis, caltable=f'{tab_name}_pol.G3', spw=spw, refant=ref_ant, refantmode='strict', solint='300', calmode='ap', 
                 field=pcal, smodel=qu_model[pcal]['Spw0'], parang=True, gaintable=[f'{tab_name}.K0', f'{tab_name}.B0', f'{tab_name}.G2'])
         
         # Redo Stokes model to check for residual gains; should be close to zero
         qu_model_calibrated = polfromgain(vis=obs_vis, tablein=f'{tab_name}_pol.G3')
+        print(f"Stokes model calculated from gains after calibration: {qu_model_calibrated}")
 
         if generate_plots:
                 # For bandpass calibrator, gain amplitude and phase
@@ -243,8 +272,8 @@ else:
         #####################################################
         
         # Kcross
-        gaincal(vis=obs_vis, caltable=f'{tab_name}_pol.Kcross0', spw='0', refant=ref_ant, solint='inf', 
-               field=pcal, gaintype='KCROSS', scan=best_scan, smodel=[1, 0, 1, 0], calmode='ap', 
+        gaincal(vis=obs_vis, caltable=f'{tab_name}_pol.Kcross0', spw=pol_spw, refant=ref_ant, solint='inf', 
+               field=pcal, gaintype='KCROSS', scan=str(best_scan), smodel=[1, 0, 1, 0], calmode='ap', 
                minblperant=1, refantmode='strict', parang=True)
 
         if generate_plots:
@@ -257,16 +286,16 @@ else:
         # Note that CASA calculates a Stokes model for the source in this step as well, but it will be incorrect!
         # The X-Y phase offset table generated here seems to be accurate
         S_model = polcal(vis=obs_vis, caltable=f'{tab_name}_pol.Xfparang',
-                  field=pcal, spw='0',
+                  field=pcal, spw=pol_spw,
                   solint='inf', combine='scan', preavg=300,
                   smodel=qu_model[pcal]['Spw0'], poltype='Xfparang+QU',
                   gaintable=[f'{tab_name}.B0', f'{tab_name}.G0', f'{tab_name}.G1', f'{tab_name}.G2', f'{tab_name}_pol.G3',
                              f'{tab_name}_pol.Kcross0'])
                              
         # Solve for leakage terms
-        polcal(vis=obs_vis, caltable=f'{tab_name}_pol.D0', field='0', spw='0', solint='inf', combine='scan', preavg=300,
+        polcal(vis=obs_vis, caltable=f'{tab_name}_pol.D0', field='0', spw=pol_spw, solint='inf', combine='scan', preavg=300,
               smodel=qu_model[pcal]['Spw0'], poltype='Dflls', refant='', 
-              gaintable=[f'{tab_name}.B0', f'{tab_name}.G0', f'{tab_name}.G1' f'{tab_name}.G2', f'{tab_name}_pol.G3',f'{tab_name}_pol.Kcross0', 
+              gaintable=[f'{tab_name}.B0', f'{tab_name}.G0', f'{tab_name}.G1', f'{tab_name}.G2', f'{tab_name}_pol.G3',f'{tab_name}_pol.Kcross0', 
                          f'{tab_name}_pol.Xfparang'])
 
         if generate_plots:
@@ -391,7 +420,7 @@ if iterate_calibration:
 
 
 ### Imaging
-do_image = True
+do_image = False
 
 if do_image:
         # Split out bcal, pcal, target
@@ -427,31 +456,7 @@ if do_image:
         tclean(vis=obs_vis, weighting='briggs', robust=0, imagename=f"{image_base}_clean_iter2", 
         cell=f"{cell}arcsec", imsize=[2048,2048], niter=1000, threshold = f"{clean_rms*5.}Jy", pblimit=-1,deconvolver='mtmfs')
 
-        ia.open(f'{image_base}_clean_iter2.image.tt0')
-        maj = ia.restoringbeam()['major']['value']
-        min = ia.restoringbeam()['minor']['value']
-        pos = ia.restoringbeam()['positionangle']['value']
-        ia.close()
-
-        fit_name = f'./IMAGES/{bcal}/fitting_region.crtf'
-        f = open(fit_name, 'w')
-        f.write('#CRTF\n')
-        f.write(f'circle[[1024pix, 1024pix],{cell * 8. * 5.}arcsec]')
-        f.close()
-
-        est_name = f'./IMAGES/{bcal}/estimates.txt'
-        f = open(est_name, 'w')
-        f.write(f'1,1024,1024,{maj}arcsec,{min}arcsec,{pos}deg,abp')
-        f.close()
-
-        fit_results = imfit(imagename=f'{image_base}_clean_iter2.image.tt0', region=fit_name, estimates=est_name)
-        flux_density = fit_results['deconvolved']['component0']['flux']['value'][0]
-        error = fit_results['deconvolved']['component0']['flux']['error'][0]
-
-        fname = './IMAGES/' + bpcal + '/' + 'fitting_results.txt'
-        f = open(fname, 'w')
-        f.write(str(flux_density) + ',' + str(error))
-        f.close()
+        calibrator_diagnostics(image_base=image_base, cell_size=cell, calibrator=bcal)
 
         # Image phase/polarization calibrator (SPLIT OUT PHASE CAL)
         obs_vis = f"{pcal}_calibrated.ms"
@@ -466,6 +471,8 @@ if do_image:
         clean_rms = imstat(f"{image_base}_clean_iter1.residual.tt0")['rms'][0]
         tclean(vis=obs_vis, weighting='briggs', robust=0, imagename=f"{image_base}_clean_iter2", 
         cell=f"{cell}arcsec", imsize=[2048,2048], niter=1000, threshold = f"{clean_rms*5.}Jy", pblimit=-1,deconvolver='mtmfs')
+
+        calibrator_diagnostics(image_base=image_base, cell_size=cell, calibrator=pcal)
 
         # Image target (SPLIT OUT ONLY TARGET DATA)
         obs_vis = f"{target}_calibrated.ms"
