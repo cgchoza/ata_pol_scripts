@@ -25,7 +25,7 @@ class SideBySidePlotsApp:
         self.root.title("Obs Plot GUI")
 
         # First plot: will be populated with astroplan altitude
-        self.fig1, self.ax1 = plt.subplots(nrows=1,ncols=1)
+        self.fig1, self.ax1 = plt.subplots(nrows=1,ncols=1, figsize=(5,5))
         self.create_plot(plot_type='alt', ax=self.ax1, cal_name=cal_name, telescope_loc=telescope_loc, obs_times=obs_times, targ_loc=cal_loc)
         self.canvas1 = FigureCanvasTkAgg(self.fig1, master=root)
         toolbar = NavigationToolbar2Tk(self.canvas1, self.root)
@@ -34,7 +34,7 @@ class SideBySidePlotsApp:
         self.canvas_widget1.pack(side=tk.LEFT, fill=tk.BOTH, expand=1)
 
         # Second plot: will be populated with astroplan parallactic angle
-        self.fig2, self.ax2 = plt.subplots(nrows=1, ncols=1)
+        self.fig2, self.ax2 = plt.subplots(nrows=1, ncols=1, figsize=(5,5))
         self.ax2 = self.create_plot(plot_type='par', ax=self.ax2, cal_name=cal_name, telescope_loc=telescope_loc, obs_times=obs_times, targ_loc=cal_loc)
         self.canvas2 = FigureCanvasTkAgg(self.fig2, master=root)
         toolbar = NavigationToolbar2Tk(self.canvas2, self.root)
@@ -47,6 +47,7 @@ class SideBySidePlotsApp:
         if plot_type == 'alt':
                 # Calculate altitudes at each obs time
                 plots.time_dependent.plot_altitude(ax=ax, targets=targ_loc, observer=telescope_loc, time=obs_times)
+                plt.grid()
                 if cal_name is not None:
                         plt.title(f'{cal_name} Altitude')
                 else:
@@ -55,6 +56,7 @@ class SideBySidePlotsApp:
         if plot_type == 'par':
                 # Calculate parallactic angle at each obs time
                 plots.time_dependent.plot_parallactic(ax=ax, target=targ_loc, observer=telescope_loc, time=obs_times)
+                plt.grid()
                 if cal_name is not None:
                         plt.title(f'{cal_name} Parallactic Angle')
                 else:
@@ -91,7 +93,7 @@ def main():
     cal_name = args.cal
     begin = args.begin
     end = args.end
-    telescope_location = EarthLocation(lat=40.8178*units.deg, lon=-121.4733*units.deg)
+    telescope_location = EarthLocation.from_geodetic(lat=40.8178*units.deg, lon=-121.4733*units.deg)
     cal_ra = args.ra
     cal_dec = args.dec
 
@@ -105,15 +107,18 @@ def main():
           cal_dict = check.check_source(cal_name)
           cal_ra = cal_dict['ra']
           cal_dec = cal_dict['dec']
-          cal_coords = ICRS(ra=cal_ra*units.deg, dec=cal_dec*units.deg)
+          cal_coords = ICRS(ra=cal_ra*units.hour, dec=cal_dec*units.deg)
 
- 
+
+
     ata = Observer(location=telescope_location, name="ATA", timezone="US/Pacific")
     target = FixedTarget(name=cal_name, coord=cal_coords)
+    print(cal_coords)
 
     start_time = Time(begin, scale='utc')
     end_time = Time(end, scale='utc')
     obs_times = start_time + (end_time - start_time) * np.linspace(0, 1, 500)
+    print(obs_times)
 
     root = tk.Tk()
     app = SideBySidePlotsApp(root, cal_name=cal_name, telescope_loc=ata, cal_loc=target, obs_times=obs_times)
