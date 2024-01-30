@@ -13,20 +13,15 @@ import glob
 import subprocess
 
 # Fields for user to edit per-observation
-# bcal = '3c147'
-# pcal = '2343+538'
-# target = 'CasA'
-
-bcal = '3c286'
-pcal = '3c286'
-target = '3c286'
+bcal = '3c147'
+pcal = '2343+538'
+target = 'CasA'
 ref_ant = '40'
-spw='0'
-pol_spw = '0:50~167'              # Measurement set should have only one spectral window, 
+pol_spw = '0'              # Measurement set should have only one spectral window, 
                                   # use to constrain bandpass used for polcal
-obs_vis = '3c286_obs.ms'
+obs_vis = 'CasA_polcal.ms'
 
-use_3c286 = False
+use_3c286 = True
 generate_plots = True
 iterate_calibration = False
 
@@ -213,7 +208,7 @@ else:
         setjy(vis=obs_vis, field=pcal, standard='Perley-Butler 2017', usescratch=True)
         
         # Kcross
-        gaincal(vis=obs_vis, caltable=f'{tab_name}_pol.Kcross0', spw=pol_spw, refant=ref_ant, solint='inf', 
+        gaincal(vis=obs_vis, caltable=f'{tab_name}_pol.Kcross0', spw=spw, refant=ref_ant, solint='inf', 
                field=pcal, gaintype='KCROSS', combine='scan', smodel=[1, 0, 1, 0], calmode='ap', 
                minblperant=1, refantmode='strict', parang=True)
 
@@ -227,14 +222,14 @@ else:
         # Note that CASA calculates a Stokes model for the source in this step as well, but it will be incorrect!
         # The X-Y phase offset table generated here seems to be accurate
         S_model = polcal(vis=obs_vis, caltable=f'{tab_name}_pol.Xfparang',
-                  field=pcal, spw=pol_spw,
+                  field=pcal, spw=spw,
                   solint='inf', combine='scan', preavg=300,
                   smodel=qu_model[pcal]['Spw0'], poltype='Xfparang+QU',
                   gaintable=[f'{tab_name}.B0', f'{tab_name}.G0', f'{tab_name}.G2', f'{tab_name}_pol.G3',
                              f'{tab_name}_pol.Kcross0'])
                              
         # Solve for leakage terms
-        polcal(vis=obs_vis, caltable=f'{tab_name}_pol.D0', field=pcal, spw=pol_spw, solint='inf', combine='scan', preavg=300,
+        polcal(vis=obs_vis, caltable=f'{tab_name}_pol.D0', field='0', spw=spw, solint='inf', combine='scan', preavg=300,
               smodel=qu_model[pcal]['Spw0'], poltype='Dflls', refant='', 
               gaintable=[f'{tab_name}.B0', f'{tab_name}.G0', f'{tab_name}.G2', f'{tab_name}_pol.G3',f'{tab_name}_pol.Kcross0', 
                          f'{tab_name}_pol.Xfparang'])
