@@ -24,6 +24,42 @@ import glob
 import subprocess
 import numpy as np
 
+#############################################################################
+# Fields for user to edit per-observation
+#############################################################################
+
+# bandpass_calibrator = '3c147'
+# phase_calibrator = '2343+538'
+# target = 'CasA'
+bandpass_calibrator = '3c286'
+phase_calibrator = '3c286'
+polarization_calibrator = '3c286'
+target = '3c286'
+ref_ant = '40'
+spw = '0'
+pol_spw = '0:40~167'              # Measurement set should have only one spectral window, 
+                                  # use to constrain bandpass used for polcal
+# obs_vis = 'CasA_obs.ms'
+obs_vis = '3c286_obs.ms'
+
+use_3c286 = False
+generate_plots = True
+iterate_calibration = False
+do_image = False
+
+tab_name = obs_vis.split('.')[0]
+
+polcal_table_dir = '/mnt/buf0/cchoza/pol_data/CasA_cal_imaging/CasA_cal_imaging'
+
+antennas = ['1b', '1c', '1e', '1g', '1h', '1k',
+            '2b', '2d', '2e', '2f', '2h', '2j', '2k', '2l', '2m',
+            '3d', '3l', '4e', '4j', '5e']
+antenna_list = ','.join([f'"{a}"' for a in antennas])
+
+
+#############################################################################
+# Define useful functions
+#############################################################################
 
 def calibrator_diagnostics(calibrator: str = '', image_base: str = '', cell_size: float = 0):
         ia.open(f'{image_base}_clean_iter2.image.tt0')
@@ -136,45 +172,25 @@ def generate_plots(use_3c286: bool = False):
                         xaxis='real', yaxis='imag', coloraxis='corr', field=phase_calibrator,
                         avgtime='100000', avgscan=True, avgchannel='168', spw='0',
                         plotfile=f'{tab_name}_pol_cal_parang_corrected_reim.png')
-                        
-        
 
-# Fields for user to edit per-observation
-# bandpass_calibrator = '3c147'
-# phase_calibrator = '2343+538'
-# target = 'CasA'
-bandpass_calibrator = '3c286'
-phase_calibrator = '3c286'
-polarization_calibrator = '3c286'
-target = '3c286'
-ref_ant = '40'
-spw = '0'
-pol_spw = '0:40~167'              # Measurement set should have only one spectral window, 
-                                  # use to constrain bandpass used for polcal
-# obs_vis = 'CasA_obs.ms'
-obs_vis = '3c286_obs.ms'
 
-use_3c286 = False
-generate_plots = True
-iterate_calibration = False
-do_image = False
-
-tab_name = obs_vis.split('.')[0]
-
-polcal_table_dir = '/mnt/buf0/cchoza/pol_data/CasA_cal_imaging/CasA_cal_imaging'
-
-antennas = ['1b', '1c', '1e', '1g', '1h', '1k',
-            '2b', '2d', '2e', '2f', '2h', '2j', '2k', '2l', '2m',
-            '3d', '3l', '4e', '4j', '5e']
-antenna_list = ','.join([f'"{a}"' for a in antennas])
-
-#############################################
+#############################################################################
 
 # Begin standard calibration
 
-#############################################
+#############################################################################
 
-# Flagging: script assumes pre-flagging using aoflagger.
+# If polarization_calibrator left as blank string, default pol cal to phase cal        
+if polarization_calibrator == '':
+                polarization_calibrator = phase_calibrator 
+    
+# If phase calibrator passed, include both as gain fields; otherwise, use only bandpass/primary
+if phase_calibrator != bandpass_calibrator:
+        gain_calibrators = f'{bandpass_calibrator}, {phase_calibrator}'
+else:
+        gain_calibrators = f'{bandpass_calibrator}'
+
+# FLAGGING: script assumes pre-flagging using aoflagger.
 ## If manual flagging desired, uncomment the below and edit to suit
 flagdata(vis=obs_vis, mode='manual', antenna="'1b'", flagbackup=False)
 flagdata(vis=obs_vis, mode='manual', antenna="'1e'", flagbackup=False)
@@ -204,57 +220,19 @@ gaincal(vis=obs_vis, caltable=f'{tab_name}.K0', field=bandpass_calibrator, spw=s
 bandpass(vis=obs_vis, caltable=f'{tab_name}.B0', field=bandpass_calibrator, spw=spw, refant=ref_ant,
          bandtype='B', gaintable=[f'{tab_name}.G0', f'{tab_name}.G1', f'{tab_name}.K0'], parang=True)
 
-# Secondary gaincal after solving for delay and bandpass
-# Use both flux calibrator and phase/linear pol calibraton
-                
-# One option: if there is no phase cal, set primary calibrator as pol cal
-# Second option: if there is a bandpass and phase calibrator, use phase cal as pol cal
-# Third option: if there is a bandpass and phase calibrator and pol calibrator, use both
-# bandpass and phase for gain cal, then do pol cal with pol field
-                
+# For fluxscale to work, we need a gain table with flux cal field and other gain calibrators both present
+gaincal(vis=obs_vis, caltable=f'{tab_name}.G2', field=gain_calibrators, spw=spw, refant=ref_ant, calmode='ap', solint='300', 
+        gaintable=[f'{tab_name}.K0', f'{tab_name}.B0'], parang=True)
 
-# They put everything in one table and fluxscale
+# Fluxscale if bootstrapping
+if len(gain_calibrators) > 1:
+        fluxscale(vis=obs_vis, caltable=f"{tab_name}.G2", fluxtable=f'{tab_name}.fluxscale', reference=bandpass_calibrator, transfer=[phase_calibrator])
 
-if polarization_calibrator == '':
-                polarization_calibrator = phase_calibrator                
-
-if phase_calibrator != bandpass_calibrator:
-        gain_calibrators = f'{bandpass_calibrator}, {phase_calibrator}'
-else:
-        gain_calibrators = f'{bandpass_calibrator}'
-
-if phase_calibrator != polarization_calibrator: # essentially, if use 3c286
-        gaincal(vis=obs_vis, caltable=f'{tab_name}.G2', field=gain_calibrators, spw=spw, refant=ref_ant, calmode='ap', solint='300', 
-                gaintable=[f'{tab_name}.K0', f'{tab_name}.B0'], parang=True)
-else:
-        gaincal(vis=obs_vis, caltable=f'{tab_name}.G2', field=gain_calibrators, spw=spw, refant=ref_ant, calmode='ap', solint='300', 
-                gaintable=[f'{tab_name}.K0', f'{tab_name}.B0'], parang=True)
-
-if not use_3c286:
-        # If using phase calibrator for polarization calibration, we allow the gains to absorb the parallactic angle 
-        # variation so that we can use it to calculate the phase_calibrator Stokes model
-        
-
-        gaincal(vis=obs_vis, caltable=f'{tab_name}.G3', field=polarization_calibrator, spw=spw, refant=ref_ant, calmode='ap', solint='300', 
-                gaintable=[f'{tab_name}.K0', f'{tab_name}.B0'])
-        
-        # Calculate Stokes model from gains
-        qu_model = polfromgain(vis=obs_vis, tablein=f'{tab_name}.G3')
-        print(f"Stokes model calculated from gains: {qu_model}")
-
-        # Redo gaincal with Stokes model; this does not absorb polarization signal
-        gaincal(vis=obs_vis, caltable=f'{tab_name}_pol.G3', refant=ref_ant, refantmode='strict', solint='300', calmode='ap', spw=spw,
-                field=polarization_calibrator, smodel=qu_model[phase_calibrator]['Spw0'], parang=True, gaintable=[f'{tab_name}.K0', f'{tab_name}.B0'])
-        
-        # Redo Stokes model to check for residual gains; should be close to zero
-        qu_model_calibrated = polfromgain(vis=obs_vis, tablein=f'{tab_name}_pol.G3')
-
-
-###########################################
+#############################################################################
         
 # Polarization calibration
 
-###########################################
+#############################################################################
 
 ## Use 3c286
 if use_3c286:
@@ -287,8 +265,23 @@ if use_3c286:
 
 ### Try on the fly with a strongly polarized calibrator
 else:
-        # Set flux model for phase calibrator
-        setjy(vis=obs_vis, field=phase_calibrator, standard='Perley-Butler 2017', usescratch=True)
+        # If using phase calibrator for polarization calibration, we allow the gains to absorb the parallactic angle 
+        # variation so that we can use it to calculate the phase_calibrator Stokes model
+
+        gaincal(vis=obs_vis, caltable=f'{tab_name}.G3', field=polarization_calibrator, spw=spw, refant=ref_ant, calmode='ap', solint='300', 
+                gaintable=[f'{tab_name}.K0', f'{tab_name}.B0'])
+        
+        # Calculate Stokes model from gains
+        qu_model = polfromgain(vis=obs_vis, tablein=f'{tab_name}.G3')
+        print(f"Stokes model calculated from gains: {qu_model}")
+
+        # Redo gaincal with Stokes model; this does not absorb polarization signal
+        gaincal(vis=obs_vis, caltable=f'{tab_name}_pol.G3', refant=ref_ant, refantmode='strict', solint='300', calmode='ap', spw=spw,
+                field=polarization_calibrator, smodel=qu_model[phase_calibrator]['Spw0'], parang=True, gaintable=[f'{tab_name}.K0', f'{tab_name}.B0'])
+        
+        # Redo Stokes model to check for residual gains; should be close to zero
+        qu_model_calibrated = polfromgain(vis=obs_vis, tablein=f'{tab_name}_pol.G3')
+
 
         ##################################################
         # Best scan to calibrate cross-hands will be where the polarization signal is 
