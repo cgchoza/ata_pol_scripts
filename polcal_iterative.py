@@ -11,6 +11,10 @@
 # Allow for different polcal and phasecal
 # Make a list of if_dosteps instead
 
+# We'll do a parang=True calibration of all gaincals to do the fluxscaling
+# Then we'll re-calibrate
+# And do separate applycals for each field
+
 #############################
 
 # Imports
@@ -21,7 +25,7 @@ import subprocess
 import numpy as np
 
 
-def calibrator_diagnostics(calibrator, image_base, cell_size):
+def calibrator_diagnostics(calibrator: str = '', image_base: str = '', cell_size: float = 0):
         ia.open(f'{image_base}_clean_iter2.image.tt0')
         maj = ia.restoringbeam()['major']['value']
         min = ia.restoringbeam()['minor']['value']
@@ -48,6 +52,92 @@ def calibrator_diagnostics(calibrator, image_base, cell_size):
         f = open(fit_result_name, 'w')
         f.write(str(flux_density) + ',' + str(error))
         f.close()
+
+def generate_plots(use_3c286: bool = False):
+        # Plot preliminary gain amplitudes
+        plotms(vis=f'{tab_name}.G0', xaxis='antenna1', yaxis='gainphase',
+        coloraxis='corr', antenna=antenna_list, spw='0',
+        plotfile=f'G1_{tab_name}_phase.png', overwrite=True)
+        # Plot preliminary gain phases
+        plotms(vis=f'{tab_name}.G1', xaxis='antenna1', yaxis='gainamp',
+        coloraxis='corr', antenna=antenna_list, spw='0',
+        plotfile=f'G0_{tab_name}_amp.png', overwrite=True)
+
+        # Bandpass solutions, frequency vs amplitude and phase
+        for ax in ['amp', 'phase']:
+                plotms(vis=f'{tab_name}.B0', xaxis='freq', yaxis=f'gain{ax}',
+                coloraxis='corr', iteraxis='antenna', gridrows=4, gridcols=5,
+                yselfscale=True, antenna=antenna_list, spw='0',
+                plotfile=f'B0_{tab_name}_{ax}.png', overwrite=True)
+
+        if not use_3c286:
+                # For bandpass calibrator, gain amplitude and phase
+                plotms(vis=f'{tab_name}.G2', xaxis='time', yaxis=f'gainamp',
+                        coloraxis='corr', iteraxis='antenna', gridrows=4, gridcols=5,
+                        yselfscale=True, antenna=antenna_list, spw='0',
+                        plotfile=f'G2_{bandpass_calibrator}_{tab_name}_amp.png', overwrite=True)
+                plotms(vis=f'{tab_name}.G2', xaxis='time', yaxis=f'gainphase',
+                        coloraxis='corr', iteraxis='antenna', gridrows=4, gridcols=5,
+                        yselfscale=True, antenna=antenna_list, spw='0',
+                        plotfile=f'G2_{bandpass_calibrator}_{tab_name}_phase.png', overwrite=True)
+
+                # For phase calibrator, gain amplitude and phase
+                plotms(vis=f'{tab_name}_pol.G3', xaxis='time', yaxis=f'gainamp',
+                        coloraxis='corr', iteraxis='antenna', gridrows=4, gridcols=5,
+                        yselfscale=True, antenna=antenna_list, spw='0',
+                        plotfile=f'G3_{tab_name}_pol_amp.png', overwrite=True)
+                plotms(vis=f'{tab_name}_pol.G3', xaxis='time', yaxis=f'gainphase',
+                        coloraxis='corr', iteraxis='antenna', gridrows=4, gridcols=5,
+                        yselfscale=True, antenna=antenna_list, spw='0',
+                        plotfile=f'G3_{phase_calibrator}_{tab_name}_pol_phase.png', overwrite=True)
+                
+                # Plot of Kcross solutions
+                plotms(vis=f'{tab_name}_pol.Kcross0', yaxis='delay', spw='0',
+                        antenna=ref_ant, coloraxis='corr',
+                        plotfile=f'{tab_name}_Kcross0.png', overwrite=True)
+                
+                for ax in ['real', 'imag']:
+                                # Real and imaginary components versus parallactic angle for polarization calibrator
+                                plotms(vis=f'{tab_name}_pol_cal.ms', ydatacolumn='corrected', xaxis='parang', yaxis=ax,
+                                        coloraxis='corr', field=phase_calibrator, avgchannel='168', spw='0',
+                                        plotfile=f'{tab_name}_parang_corrected_{ax}_vs_parang.png', overwrite=True)
+                                # Real and imaginary components versus frequency for polarization calibrator
+                                plotms(vis=f'{tab_name}_pol_cal.ms', ydatacolumn='corrected', xaxis='freq', yaxis=ax,
+                                        coloraxis='corr', field=phase_calibrator, avgtime='100000', avgscan=True, spw='0',
+                                        plotfile=f'{tab_name}_parang_corrected_{ax}_vs_freq.png', overwrite=True)
+                # Parallactic angle-corrected real vs imaginary components for polarization calibrator
+                plotms(vis=f'{tab_name}_pol_cal.ms', xdatacolumn='corrected', ydatacolumn='corrected',
+                        xaxis='real', yaxis='imag', coloraxis='corr', field=phase_calibrator,
+                        avgtime='100000', avgscan=True, avgchannel='168', spw='0',
+                        plotfile=f'{tab_name}_pol_cal_parang_corrected_reim.png')
+
+        
+        # Plots of phase-frequency and real/imaginary leakage terms by antenna
+                plotms(vis=f'{tab_name}_pol.Xfparang', xaxis='freq', yaxis='gainphase',
+                        plotfile=f'{tab_name}_freq_vs_gainphase.png', overwrite=True)
+
+                for ax in ['real', 'imag']:
+                        plotms(vis=f'{tab_name}_pol.D0', xaxis='freq', yaxis=ax,
+                                coloraxis='corr', iteraxis='antenna', gridrows=4, gridcols=5,
+                                yselfscale=True, antenna=antenna_list,
+                                plotfile=f'D0_{tab_name}_pol_{ax}.png', overwrite=True)
+                        
+                for ax in ['real', 'imag']:
+                        # Real and imaginary components versus parallactic angle for polarization calibrator
+                        plotms(vis=f'{tab_name}_pol_cal.ms', ydatacolumn='corrected', xaxis='parang', yaxis=ax,
+                                coloraxis='corr', field=phase_calibrator, avgchannel='168', spw='0',
+                                plotfile=f'{tab_name}_parang_corrected_{ax}_vs_parang.png', overwrite=True)
+                        # Real and imaginary components versus frequency for polarization calibrator
+                        plotms(vis=f'{tab_name}_pol_cal.ms', ydatacolumn='corrected', xaxis='freq', yaxis=ax,
+                                coloraxis='corr', field=phase_calibrator, avgtime='100000', avgscan=True, spw='0',
+                                plotfile=f'{tab_name}_parang_corrected_{ax}_vs_freq.png', overwrite=True)
+                # Parallactic angle-corrected real vs imaginary components for polarization calibrator
+                plotms(vis=f'{tab_name}_pol_cal.ms', xdatacolumn='corrected', ydatacolumn='corrected',
+                        xaxis='real', yaxis='imag', coloraxis='corr', field=phase_calibrator,
+                        avgtime='100000', avgscan=True, avgchannel='168', spw='0',
+                        plotfile=f'{tab_name}_pol_cal_parang_corrected_reim.png')
+                        
+        
 
 # Fields for user to edit per-observation
 # bandpass_calibrator = '3c147'
@@ -105,16 +195,6 @@ gaincal(vis=obs_vis, caltable=f'{tab_name}.G0', field=bandpass_calibrator, spw=s
 gaincal(vis=obs_vis, caltable=f'{tab_name}.G1', field=bandpass_calibrator, spw=spw, refant=ref_ant, refantmode='strict', calmode='a', 
         solint='100', preavg=1, minblperant=1, minsnr=0, gaintype='G', gaintable=[f'{tab_name}.G0'], parang=True)
 
-if generate_plots:
-        # Plot preliminary gain amplitudes
-        plotms(vis=f'{tab_name}.G0', xaxis='antenna1', yaxis='gainphase',
-        coloraxis='corr', antenna=antenna_list, spw='0',
-        plotfile=f'G1_{tab_name}_phase.png', overwrite=True)
-        # Plot preliminary gain phases
-        plotms(vis=f'{tab_name}.G1', xaxis='antenna1', yaxis='gainamp',
-        coloraxis='corr', antenna=antenna_list, spw='0',
-        plotfile=f'G0_{tab_name}_amp.png', overwrite=True)
-
 # Delay calibration
 gaincal(vis=obs_vis, caltable=f'{tab_name}.K0', field=bandpass_calibrator, spw=spw, refant=ref_ant, solint='inf', combine='scan', 
         preavg=1, minblperant=1, gaintype='K', gaintable=[f'{tab_name}.G0', f'{tab_name}.G1'], parang=True)
@@ -124,54 +204,39 @@ gaincal(vis=obs_vis, caltable=f'{tab_name}.K0', field=bandpass_calibrator, spw=s
 bandpass(vis=obs_vis, caltable=f'{tab_name}.B0', field=bandpass_calibrator, spw=spw, refant=ref_ant,
          bandtype='B', gaintable=[f'{tab_name}.G0', f'{tab_name}.G1', f'{tab_name}.K0'], parang=True)
 
-if generate_plots:
-        # Bandpass solutions, frequency vs amplitude and phase
-        for ax in ['amp', 'phase']:
-                plotms(vis=f'{tab_name}.B0', xaxis='freq', yaxis=f'gain{ax}',
-                coloraxis='corr', iteraxis='antenna', gridrows=4, gridcols=5,
-                yselfscale=True, antenna=antenna_list, spw='0',
-                plotfile=f'B0_{tab_name}_{ax}.png', overwrite=True)
-
 # Secondary gaincal after solving for delay and bandpass
 # Use both flux calibrator and phase/linear pol calibraton
-gaincal(vis=obs_vis, caltable=f'{tab_name}.G2', field=bandpass_calibrator, spw=spw, refant=ref_ant, calmode='ap', solint='300', 
-        gaintable=[f'{tab_name}.K0', f'{tab_name}.B0'], parang=True)
-if use_3c286:
-        gaincal(vis=obs_vis, caltable=f'{tab_name}.G2', field='0', spw=spw, refant=ref_ant, calmode='ap', solint='300', 
-                gaintable=[f'{tab_name}.K0', f'{tab_name}.B0', f'{tab_name}.G2'], parang=True, append=True)
-
-        if generate_plots:
-                # For bandpass calibrator, gain amplitude and phase
-                plotms(vis=f'{tab_name}.G2', field=bandpass_calibrator, xaxis='time', yaxis=f'gainamp',
-                        coloraxis='corr', iteraxis='antenna', gridrows=4, gridcols=5,
-                        yselfscale=True, antenna=antenna_list, spw='0',
-                        plotfile=f'G2_{bandpass_calibrator}_{tab_name}_amp.png', overwrite=True)
-                plotms(vis=f'{tab_name}.G2', field=bandpass_calibrator, xaxis='time', yaxis=f'gainphase',
-                        coloraxis='corr', iteraxis='antenna', gridrows=4, gridcols=5,
-                        yselfscale=True, antenna=antenna_list, spw='0',
-                        plotfile=f'G2_{bandpass_calibrator}_{tab_name}_phase.png', overwrite=True)
-
-                # For phase calibrator, gain amplitude and phase
-                plotms(vis=f'{tab_name}.G2', field=phase_calibrator, xaxis='time', yaxis=f'gainamp',
-                        coloraxis='corr', iteraxis='antenna', gridrows=4, gridcols=5,
-                        yselfscale=True, antenna=antenna_list, spw='0',
-                        plotfile=f'G3_{phase_calibrator}_{tab_name}_amp.png', overwrite=True)
-                plotms(vis=f'{tab_name}.G2', field=phase_calibrator, xaxis='time', yaxis=f'gainphase',
-                        coloraxis='corr', iteraxis='antenna', gridrows=4, gridcols=5,
-                        yselfscale=True, antenna=antenna_list, spw='0',
-                        plotfile=f'G2_{phase_calibrator}_{tab_name}_phase.png', overwrite=True)
-
-else:
-        # If using phase calibrator for polarization calibration, we allow the gains to absorb the parallactic angle 
-        # variation so that we can use it to calculate the phase_calibrator Stokes model
-
-        if polarization_calibrator == '':
-                polarization_calibrator = phase_calibrator
-        else:
+                
+# One option: if there is no phase cal, set primary calibrator as pol cal
+# Second option: if there is a bandpass and phase calibrator, use phase cal as pol cal
+# Third option: if there is a bandpass and phase calibrator and pol calibrator, use both
+# bandpass and phase for gain cal, then do pol cal with pol field
                 
 
-        gaincal(vis=obs_vis, caltable=f'{tab_name}.G3', field=phase_calibrator, spw=spw, refant=ref_ant, calmode='ap', solint='300', 
-                gaintable=[f'{tab_name}.K0', f'{tab_name}.B0', f'{tab_name}.G2'])
+# They put everything in one table and fluxscale
+
+if polarization_calibrator == '':
+                polarization_calibrator = phase_calibrator                
+
+if phase_calibrator != bandpass_calibrator:
+        gain_calibrators = f'{bandpass_calibrator}, {phase_calibrator}'
+else:
+        gain_calibrators = f'{bandpass_calibrator}'
+
+if phase_calibrator != polarization_calibrator: # essentially, if use 3c286
+        gaincal(vis=obs_vis, caltable=f'{tab_name}.G2', field=gain_calibrators, spw=spw, refant=ref_ant, calmode='ap', solint='300', 
+                gaintable=[f'{tab_name}.K0', f'{tab_name}.B0'], parang=True)
+else:
+        gaincal(vis=obs_vis, caltable=f'{tab_name}.G2', field=gain_calibrators, spw=spw, refant=ref_ant, calmode='ap', solint='300', 
+                gaintable=[f'{tab_name}.K0', f'{tab_name}.B0'], parang=True)
+
+if not use_3c286:
+        # If using phase calibrator for polarization calibration, we allow the gains to absorb the parallactic angle 
+        # variation so that we can use it to calculate the phase_calibrator Stokes model
+        
+
+        gaincal(vis=obs_vis, caltable=f'{tab_name}.G3', field=polarization_calibrator, spw=spw, refant=ref_ant, calmode='ap', solint='300', 
+                gaintable=[f'{tab_name}.K0', f'{tab_name}.B0'])
         
         # Calculate Stokes model from gains
         qu_model = polfromgain(vis=obs_vis, tablein=f'{tab_name}.G3')
@@ -179,31 +244,10 @@ else:
 
         # Redo gaincal with Stokes model; this does not absorb polarization signal
         gaincal(vis=obs_vis, caltable=f'{tab_name}_pol.G3', refant=ref_ant, refantmode='strict', solint='300', calmode='ap', spw=spw,
-                field=phase_calibrator, smodel=qu_model[phase_calibrator]['Spw0'], parang=True, gaintable=[f'{tab_name}.K0', f'{tab_name}.B0', f'{tab_name}.G2'])
+                field=polarization_calibrator, smodel=qu_model[phase_calibrator]['Spw0'], parang=True, gaintable=[f'{tab_name}.K0', f'{tab_name}.B0'])
         
         # Redo Stokes model to check for residual gains; should be close to zero
         qu_model_calibrated = polfromgain(vis=obs_vis, tablein=f'{tab_name}_pol.G3')
-
-        if generate_plots:
-                # For bandpass calibrator, gain amplitude and phase
-                plotms(vis=f'{tab_name}.G2', xaxis='time', yaxis=f'gainamp',
-                        coloraxis='corr', iteraxis='antenna', gridrows=4, gridcols=5,
-                        yselfscale=True, antenna=antenna_list, spw='0',
-                        plotfile=f'G2_{bandpass_calibrator}_{tab_name}_amp.png', overwrite=True)
-                plotms(vis=f'{tab_name}.G2', xaxis='time', yaxis=f'gainphase',
-                        coloraxis='corr', iteraxis='antenna', gridrows=4, gridcols=5,
-                        yselfscale=True, antenna=antenna_list, spw='0',
-                        plotfile=f'G2_{bandpass_calibrator}_{tab_name}_phase.png', overwrite=True)
-
-                # For phase calibrator, gain amplitude and phase
-                plotms(vis=f'{tab_name}_pol.G3', xaxis='time', yaxis=f'gainamp',
-                        coloraxis='corr', iteraxis='antenna', gridrows=4, gridcols=5,
-                        yselfscale=True, antenna=antenna_list, spw='0',
-                        plotfile=f'G3_{tab_name}_pol_amp.png', overwrite=True)
-                plotms(vis=f'{tab_name}_pol.G3', xaxis='time', yaxis=f'gainphase',
-                        coloraxis='corr', iteraxis='antenna', gridrows=4, gridcols=5,
-                        yselfscale=True, antenna=antenna_list, spw='0',
-                        plotfile=f'G3_{phase_calibrator}_{tab_name}_pol_phase.png', overwrite=True)
 
 
 ###########################################
@@ -240,22 +284,6 @@ if use_3c286:
 
         split(obs_vis, outputvis=f'{tab_name}_pol_cal.ms', datacolumn='corrected')
 
-        if generate_plots:
-                for ax in ['real', 'imag']:
-                        # Real and imaginary components versus parallactic angle for polarization calibrator
-                        plotms(vis=f'{tab_name}_pol_cal.ms', ydatacolumn='corrected', xaxis='parang', yaxis=ax,
-                                coloraxis='corr', field=phase_calibrator, avgchannel='168', spw='0',
-                                plotfile=f'{tab_name}_parang_corrected_{ax}_vs_parang.png', overwrite=True)
-                        # Real and imaginary components versus frequency for polarization calibrator
-                        plotms(vis=f'{tab_name}_pol_cal.ms', ydatacolumn='corrected', xaxis='freq', yaxis=ax,
-                                coloraxis='corr', field=phase_calibrator, avgtime='100000', avgscan=True, spw='0',
-                                plotfile=f'{tab_name}_parang_corrected_{ax}_vs_freq.png', overwrite=True)
-                # Parallactic angle-corrected real vs imaginary components for polarization calibrator
-                plotms(vis=f'{tab_name}_pol_cal.ms', xdatacolumn='corrected', ydatacolumn='corrected',
-                        xaxis='real', yaxis='imag', coloraxis='corr', field=phase_calibrator,
-                        avgtime='100000', avgscan=True, avgchannel='168', spw='0',
-                        plotfile=f'{tab_name}_pol_cal_parang_corrected_reim.png')
-
 
 ### Try on the fly with a strongly polarized calibrator
 else:
@@ -287,12 +315,6 @@ else:
         gaincal(vis=obs_vis, caltable=f'{tab_name}_pol.Kcross0', spw=pol_spw, refant=ref_ant, solint='inf', 
                field=phase_calibrator, gaintype='KCROSS', scan=str(best_scan), smodel=[1, 0, 1, 0], calmode='ap', 
                minblperant=1, refantmode='strict', parang=True)
-
-        if generate_plots:
-                # Plot of Kcross solutions
-                plotms(vis=f'{tab_name}_pol.Kcross0', yaxis='delay', spw='0',
-                        antenna=ref_ant, coloraxis='corr',
-                        plotfile=f'{tab_name}_Kcross0.png', overwrite=True)
                
         # Solve for the apparent cross-hand phase spectrum (channelized) fractional linear polarization, Q, U
         # Note that CASA calculates a Stokes model for the source in this step as well, but it will be incorrect!
@@ -309,17 +331,6 @@ else:
               smodel=qu_model[phase_calibrator]['Spw0'], poltype='Dflls', refant='', 
               gaintable=[f'{tab_name}.B0', f'{tab_name}.G0', f'{tab_name}.G1', f'{tab_name}.G2', f'{tab_name}_pol.G3', f'{tab_name}_pol.Kcross0', 
                          f'{tab_name}_pol.Xfparang'])
-
-        if generate_plots:
-                # Plots of phase-frequency and real/imaginary leakage terms by antenna
-                plotms(vis=f'{tab_name}_pol.Xfparang', xaxis='freq', yaxis='gainphase',
-                        plotfile=f'{tab_name}_freq_vs_gainphase.png', overwrite=True)
-
-                for ax in ['real', 'imag']:
-                        plotms(vis=f'{tab_name}_pol.D0', xaxis='freq', yaxis=ax,
-                                coloraxis='corr', iteraxis='antenna', gridrows=4, gridcols=5,
-                                yselfscale=True, antenna=antenna_list,
-                                plotfile=f'D0_{tab_name}_pol_{ax}.png', overwrite=True)
         
         # Apply the tables
         kcross = f'{tab_name}_pol.Kcross0'
@@ -331,22 +342,6 @@ else:
 
         # Save out a calibrated measurement set
         split(vis=obs_vis, outputvis=f'{tab_name}_pol_cal.ms', datacolumn='corrected')
-
-        if generate_plots:
-                for ax in ['real', 'imag']:
-                        # Real and imaginary components versus parallactic angle for polarization calibrator
-                        plotms(vis=f'{tab_name}_pol_cal.ms', ydatacolumn='corrected', xaxis='parang', yaxis=ax,
-                                coloraxis='corr', field=phase_calibrator, avgchannel='168', spw='0',
-                                plotfile=f'{tab_name}_parang_corrected_{ax}_vs_parang.png', overwrite=True)
-                        # Real and imaginary components versus frequency for polarization calibrator
-                        plotms(vis=f'{tab_name}_pol_cal.ms', ydatacolumn='corrected', xaxis='freq', yaxis=ax,
-                                coloraxis='corr', field=phase_calibrator, avgtime='100000', avgscan=True, spw='0',
-                                plotfile=f'{tab_name}_parang_corrected_{ax}_vs_freq.png', overwrite=True)
-                # Parallactic angle-corrected real vs imaginary components for polarization calibrator
-                plotms(vis=f'{tab_name}_pol_cal.ms', xdatacolumn='corrected', ydatacolumn='corrected',
-                        xaxis='real', yaxis='imag', coloraxis='corr', field=phase_calibrator,
-                        avgtime='100000', avgscan=True, avgchannel='168', spw='0',
-                        plotfile=f'{tab_name}_pol_cal_parang_corrected_reim.png')
 
 ### Try on the fly with unpolarized cal
 
