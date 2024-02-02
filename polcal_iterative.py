@@ -8,8 +8,8 @@
 # Add in provision for length of pol cal scans?
 # Test iterative calibration and allow re-calibrated ms to be used for imaging
 # Stokes maps
-# Fluxscale note: doesn't work with recomputing polfromgain to check Stokes model
 # Allow for different polcal and phasecal
+# Make a list of if_dosteps instead
 
 #############################
 
@@ -50,11 +50,12 @@ def calibrator_diagnostics(calibrator, image_base, cell_size):
         f.close()
 
 # Fields for user to edit per-observation
-# bcal = '3c147'
-# pcal = '2343+538'
+# bandpass_calibrator = '3c147'
+# phase_calibrator = '2343+538'
 # target = 'CasA'
-bcal = '3c286'
-pcal = '3c286'
+bandpass_calibrator = '3c286'
+phase_calibrator = '3c286'
+polarization_calibrator = '3c286'
 target = '3c286'
 ref_ant = '40'
 spw = '0'
@@ -87,21 +88,21 @@ antenna_list = ','.join([f'"{a}"' for a in antennas])
 ## If manual flagging desired, uncomment the below and edit to suit
 flagdata(vis=obs_vis, mode='manual', antenna="'1b'", flagbackup=False)
 flagdata(vis=obs_vis, mode='manual', antenna="'1e'", flagbackup=False)
-flagdata(vis=obs_vis, mode='manual', antenna="'4e'", flagbackup=False)
+# flagdata(vis=obs_vis, mode='manual', antenna="'4e'", flagbackup=False)
 flagdata(vis=obs_vis, field=target, mode='tfcrop', datacolumn='DATA')
 flagdata(vis=obs_vis, field=target, mode='rflag', datacolumn='DATA')
 
 # Set flux model for flux calibrator 
-setjy(vis=obs_vis, field=bcal, standard='Perley-Butler 2017', usescratch=True)
+setjy(vis=obs_vis, field=bandpass_calibrator, standard='Perley-Butler 2017', usescratch=True)
 
 # Listobs
 listobs(vis=obs_vis)
 
 # Preliminary gaincal
 # This will be thrown away after solving for delay and bandpass
-gaincal(vis=obs_vis, caltable=f'{tab_name}.G0', field=bcal, spw=spw, refant=ref_ant, refantmode='strict', calmode='p', 
+gaincal(vis=obs_vis, caltable=f'{tab_name}.G0', field=bandpass_calibrator, spw=spw, refant=ref_ant, refantmode='strict', calmode='p', 
         solint='inf', parang=True)
-gaincal(vis=obs_vis, caltable=f'{tab_name}.G1', field=bcal, spw=spw, refant=ref_ant, refantmode='strict', calmode='a', 
+gaincal(vis=obs_vis, caltable=f'{tab_name}.G1', field=bandpass_calibrator, spw=spw, refant=ref_ant, refantmode='strict', calmode='a', 
         solint='100', preavg=1, minblperant=1, minsnr=0, gaintype='G', gaintable=[f'{tab_name}.G0'], parang=True)
 
 if generate_plots:
@@ -115,12 +116,12 @@ if generate_plots:
         plotfile=f'G0_{tab_name}_amp.png', overwrite=True)
 
 # Delay calibration
-gaincal(vis=obs_vis, caltable=f'{tab_name}.K0', field=bcal, spw=spw, refant=ref_ant, solint='inf', combine='scan', 
+gaincal(vis=obs_vis, caltable=f'{tab_name}.K0', field=bandpass_calibrator, spw=spw, refant=ref_ant, solint='inf', combine='scan', 
         preavg=1, minblperant=1, gaintype='K', gaintable=[f'{tab_name}.G0', f'{tab_name}.G1'], parang=True)
 
 # Bandpass
 # NOTE: low freq spectral windows so we'll use a small averaging window, may be appropriate to allow edit
-bandpass(vis=obs_vis, caltable=f'{tab_name}.B0', field=bcal, spw=spw, refant=ref_ant,
+bandpass(vis=obs_vis, caltable=f'{tab_name}.B0', field=bandpass_calibrator, spw=spw, refant=ref_ant,
          bandtype='B', gaintable=[f'{tab_name}.G0', f'{tab_name}.G1', f'{tab_name}.K0'], parang=True)
 
 if generate_plots:
@@ -133,7 +134,7 @@ if generate_plots:
 
 # Secondary gaincal after solving for delay and bandpass
 # Use both flux calibrator and phase/linear pol calibraton
-gaincal(vis=obs_vis, caltable=f'{tab_name}.G2', field=bcal, spw=spw, refant=ref_ant, calmode='ap', solint='300', 
+gaincal(vis=obs_vis, caltable=f'{tab_name}.G2', field=bandpass_calibrator, spw=spw, refant=ref_ant, calmode='ap', solint='300', 
         gaintable=[f'{tab_name}.K0', f'{tab_name}.B0'], parang=True)
 if use_3c286:
         gaincal(vis=obs_vis, caltable=f'{tab_name}.G2', field='0', spw=spw, refant=ref_ant, calmode='ap', solint='300', 
@@ -141,29 +142,35 @@ if use_3c286:
 
         if generate_plots:
                 # For bandpass calibrator, gain amplitude and phase
-                plotms(vis=f'{tab_name}.G2', field=bcal, xaxis='time', yaxis=f'gainamp',
+                plotms(vis=f'{tab_name}.G2', field=bandpass_calibrator, xaxis='time', yaxis=f'gainamp',
                         coloraxis='corr', iteraxis='antenna', gridrows=4, gridcols=5,
                         yselfscale=True, antenna=antenna_list, spw='0',
-                        plotfile=f'G2_{bcal}_{tab_name}_amp.png', overwrite=True)
-                plotms(vis=f'{tab_name}.G2', field=bcal, xaxis='time', yaxis=f'gainphase',
+                        plotfile=f'G2_{bandpass_calibrator}_{tab_name}_amp.png', overwrite=True)
+                plotms(vis=f'{tab_name}.G2', field=bandpass_calibrator, xaxis='time', yaxis=f'gainphase',
                         coloraxis='corr', iteraxis='antenna', gridrows=4, gridcols=5,
                         yselfscale=True, antenna=antenna_list, spw='0',
-                        plotfile=f'G2_{bcal}_{tab_name}_phase.png', overwrite=True)
+                        plotfile=f'G2_{bandpass_calibrator}_{tab_name}_phase.png', overwrite=True)
 
                 # For phase calibrator, gain amplitude and phase
-                plotms(vis=f'{tab_name}.G2', field=pcal, xaxis='time', yaxis=f'gainamp',
+                plotms(vis=f'{tab_name}.G2', field=phase_calibrator, xaxis='time', yaxis=f'gainamp',
                         coloraxis='corr', iteraxis='antenna', gridrows=4, gridcols=5,
                         yselfscale=True, antenna=antenna_list, spw='0',
-                        plotfile=f'G3_{pcal}_{tab_name}_amp.png', overwrite=True)
-                plotms(vis=f'{tab_name}.G2', field=pcal, xaxis='time', yaxis=f'gainphase',
+                        plotfile=f'G3_{phase_calibrator}_{tab_name}_amp.png', overwrite=True)
+                plotms(vis=f'{tab_name}.G2', field=phase_calibrator, xaxis='time', yaxis=f'gainphase',
                         coloraxis='corr', iteraxis='antenna', gridrows=4, gridcols=5,
                         yselfscale=True, antenna=antenna_list, spw='0',
-                        plotfile=f'G2_{pcal}_{tab_name}_phase.png', overwrite=True)
+                        plotfile=f'G2_{phase_calibrator}_{tab_name}_phase.png', overwrite=True)
 
 else:
         # If using phase calibrator for polarization calibration, we allow the gains to absorb the parallactic angle 
-        # variation so that we can use it to calculate the pcal Stokes model
-        gaincal(vis=obs_vis, caltable=f'{tab_name}.G3', field=pcal, spw=spw, refant=ref_ant, calmode='ap', solint='300', 
+        # variation so that we can use it to calculate the phase_calibrator Stokes model
+
+        if polarization_calibrator == '':
+                polarization_calibrator = phase_calibrator
+        else:
+                
+
+        gaincal(vis=obs_vis, caltable=f'{tab_name}.G3', field=phase_calibrator, spw=spw, refant=ref_ant, calmode='ap', solint='300', 
                 gaintable=[f'{tab_name}.K0', f'{tab_name}.B0', f'{tab_name}.G2'])
         
         # Calculate Stokes model from gains
@@ -171,37 +178,33 @@ else:
         print(f"Stokes model calculated from gains: {qu_model}")
 
         # Redo gaincal with Stokes model; this does not absorb polarization signal
-        gaincal(vis=obs_vis, caltable=f'{tab_name}.G2', spw=spw, refant=ref_ant, refantmode='strict', solint='300', calmode='ap', 
-                field=pcal, smodel=qu_model[pcal]['Spw0'], parang=True, gaintable=[f'{tab_name}.K0', f'{tab_name}.B0', f'{tab_name}.G2'], 
-                append=True)
+        gaincal(vis=obs_vis, caltable=f'{tab_name}_pol.G3', refant=ref_ant, refantmode='strict', solint='300', calmode='ap', spw=spw,
+                field=phase_calibrator, smodel=qu_model[phase_calibrator]['Spw0'], parang=True, gaintable=[f'{tab_name}.K0', f'{tab_name}.B0', f'{tab_name}.G2'])
         
         # Redo Stokes model to check for residual gains; should be close to zero
-        qu_model_calibrated = polfromgain(vis=obs_vis, tablein=f'{tab_name}.G2')
-        print(f"Stokes model calculated from gains after calibration: {qu_model_calibrated}")
+        qu_model_calibrated = polfromgain(vis=obs_vis, tablein=f'{tab_name}_pol.G3')
 
         if generate_plots:
                 # For bandpass calibrator, gain amplitude and phase
-                plotms(vis=f'{tab_name}.G2',field=bcal, xaxis='time', yaxis=f'gainamp',
+                plotms(vis=f'{tab_name}.G2', xaxis='time', yaxis=f'gainamp',
                         coloraxis='corr', iteraxis='antenna', gridrows=4, gridcols=5,
                         yselfscale=True, antenna=antenna_list, spw='0',
-                        plotfile=f'G2_{bcal}_{tab_name}_amp.png', overwrite=True)
-                plotms(vis=f'{tab_name}.G2', field=bcal, xaxis='time', yaxis=f'gainphase',
+                        plotfile=f'G2_{bandpass_calibrator}_{tab_name}_amp.png', overwrite=True)
+                plotms(vis=f'{tab_name}.G2', xaxis='time', yaxis=f'gainphase',
                         coloraxis='corr', iteraxis='antenna', gridrows=4, gridcols=5,
                         yselfscale=True, antenna=antenna_list, spw='0',
-                        plotfile=f'G2_{bcal}_{tab_name}_phase.png', overwrite=True)
+                        plotfile=f'G2_{bandpass_calibrator}_{tab_name}_phase.png', overwrite=True)
 
                 # For phase calibrator, gain amplitude and phase
-                plotms(vis=f'{tab_name}.G2', field=pcal, xaxis='time', yaxis=f'gainamp',
+                plotms(vis=f'{tab_name}_pol.G3', xaxis='time', yaxis=f'gainamp',
                         coloraxis='corr', iteraxis='antenna', gridrows=4, gridcols=5,
                         yselfscale=True, antenna=antenna_list, spw='0',
-                        plotfile=f'G2_{pcal}_{tab_name}_pol_amp.png', overwrite=True)
-                plotms(vis=f'{tab_name}.G2', field=pcal, xaxis='time', yaxis=f'gainphase',
+                        plotfile=f'G3_{tab_name}_pol_amp.png', overwrite=True)
+                plotms(vis=f'{tab_name}_pol.G3', xaxis='time', yaxis=f'gainphase',
                         coloraxis='corr', iteraxis='antenna', gridrows=4, gridcols=5,
                         yselfscale=True, antenna=antenna_list, spw='0',
-                        plotfile=f'G2_{pcal}_{tab_name}_pol_phase.png', overwrite=True)
-                
-# fluxscale(vis=obs_vis, caltable=f'{tab_name}.G2', reference=bcal, transfer='', fluxtable=f'{tab_name}.flux', 
-#           append=False, display=False)
+                        plotfile=f'G3_{phase_calibrator}_{tab_name}_pol_phase.png', overwrite=True)
+
 
 ###########################################
         
@@ -241,15 +244,15 @@ if use_3c286:
                 for ax in ['real', 'imag']:
                         # Real and imaginary components versus parallactic angle for polarization calibrator
                         plotms(vis=f'{tab_name}_pol_cal.ms', ydatacolumn='corrected', xaxis='parang', yaxis=ax,
-                                coloraxis='corr', field=pcal, avgchannel='168', spw='0',
+                                coloraxis='corr', field=phase_calibrator, avgchannel='168', spw='0',
                                 plotfile=f'{tab_name}_parang_corrected_{ax}_vs_parang.png', overwrite=True)
                         # Real and imaginary components versus frequency for polarization calibrator
                         plotms(vis=f'{tab_name}_pol_cal.ms', ydatacolumn='corrected', xaxis='freq', yaxis=ax,
-                                coloraxis='corr', field=pcal, avgtime='100000', avgscan=True, spw='0',
+                                coloraxis='corr', field=phase_calibrator, avgtime='100000', avgscan=True, spw='0',
                                 plotfile=f'{tab_name}_parang_corrected_{ax}_vs_freq.png', overwrite=True)
                 # Parallactic angle-corrected real vs imaginary components for polarization calibrator
                 plotms(vis=f'{tab_name}_pol_cal.ms', xdatacolumn='corrected', ydatacolumn='corrected',
-                        xaxis='real', yaxis='imag', coloraxis='corr', field=pcal,
+                        xaxis='real', yaxis='imag', coloraxis='corr', field=phase_calibrator,
                         avgtime='100000', avgscan=True, avgchannel='168', spw='0',
                         plotfile=f'{tab_name}_pol_cal_parang_corrected_reim.png')
 
@@ -257,7 +260,7 @@ if use_3c286:
 ### Try on the fly with a strongly polarized calibrator
 else:
         # Set flux model for phase calibrator
-        setjy(vis=obs_vis, field=pcal, standard='Perley-Butler 2017', usescratch=True)
+        setjy(vis=obs_vis, field=phase_calibrator, standard='Perley-Butler 2017', usescratch=True)
 
         ##################################################
         # Best scan to calibrate cross-hands will be where the polarization signal is 
@@ -282,7 +285,7 @@ else:
         
         # Kcross
         gaincal(vis=obs_vis, caltable=f'{tab_name}_pol.Kcross0', spw=pol_spw, refant=ref_ant, solint='inf', 
-               field=pcal, gaintype='KCROSS', scan=str(best_scan), smodel=[1, 0, 1, 0], calmode='ap', 
+               field=phase_calibrator, gaintype='KCROSS', scan=str(best_scan), smodel=[1, 0, 1, 0], calmode='ap', 
                minblperant=1, refantmode='strict', parang=True)
 
         if generate_plots:
@@ -295,16 +298,16 @@ else:
         # Note that CASA calculates a Stokes model for the source in this step as well, but it will be incorrect!
         # The X-Y phase offset table generated here seems to be accurate
         S_model = polcal(vis=obs_vis, caltable=f'{tab_name}_pol.Xfparang',
-                  field=pcal, spw=pol_spw,
+                  field=phase_calibrator, spw=pol_spw,
                   solint='inf', combine='scan', preavg=300,
-                  smodel=qu_model[pcal]['Spw0'], poltype='Xfparang+QU',
-                  gaintable=[f'{tab_name}.B0', f'{tab_name}.G0', f'{tab_name}.G1', f'{tab_name}.G2',
+                  smodel=qu_model[phase_calibrator]['Spw0'], poltype='Xfparang+QU',
+                  gaintable=[f'{tab_name}.B0', f'{tab_name}.G0', f'{tab_name}.G1', f'{tab_name}.G2', f'{tab_name}_pol.G3',
                              f'{tab_name}_pol.Kcross0'])
                              
         # Solve for leakage terms
         polcal(vis=obs_vis, caltable=f'{tab_name}_pol.D0', field='0', spw=pol_spw, solint='inf', combine='scan', preavg=300,
-              smodel=qu_model[pcal]['Spw0'], poltype='Dflls', refant='', 
-              gaintable=[f'{tab_name}.B0', f'{tab_name}.G0', f'{tab_name}.G1', f'{tab_name}.G2', f'{tab_name}_pol.Kcross0', 
+              smodel=qu_model[phase_calibrator]['Spw0'], poltype='Dflls', refant='', 
+              gaintable=[f'{tab_name}.B0', f'{tab_name}.G0', f'{tab_name}.G1', f'{tab_name}.G2', f'{tab_name}_pol.G3', f'{tab_name}_pol.Kcross0', 
                          f'{tab_name}_pol.Xfparang'])
 
         if generate_plots:
@@ -333,15 +336,15 @@ else:
                 for ax in ['real', 'imag']:
                         # Real and imaginary components versus parallactic angle for polarization calibrator
                         plotms(vis=f'{tab_name}_pol_cal.ms', ydatacolumn='corrected', xaxis='parang', yaxis=ax,
-                                coloraxis='corr', field=pcal, avgchannel='168', spw='0',
+                                coloraxis='corr', field=phase_calibrator, avgchannel='168', spw='0',
                                 plotfile=f'{tab_name}_parang_corrected_{ax}_vs_parang.png', overwrite=True)
                         # Real and imaginary components versus frequency for polarization calibrator
                         plotms(vis=f'{tab_name}_pol_cal.ms', ydatacolumn='corrected', xaxis='freq', yaxis=ax,
-                                coloraxis='corr', field=pcal, avgtime='100000', avgscan=True, spw='0',
+                                coloraxis='corr', field=phase_calibrator, avgtime='100000', avgscan=True, spw='0',
                                 plotfile=f'{tab_name}_parang_corrected_{ax}_vs_freq.png', overwrite=True)
                 # Parallactic angle-corrected real vs imaginary components for polarization calibrator
                 plotms(vis=f'{tab_name}_pol_cal.ms', xdatacolumn='corrected', ydatacolumn='corrected',
-                        xaxis='real', yaxis='imag', coloraxis='corr', field=pcal,
+                        xaxis='real', yaxis='imag', coloraxis='corr', field=phase_calibrator,
                         avgtime='100000', avgscan=True, avgchannel='168', spw='0',
                         plotfile=f'{tab_name}_pol_cal_parang_corrected_reim.png')
 
@@ -363,25 +366,25 @@ if iterate_calibration:
         else:
                 # Begin gain calibration again on the uncorrected bandpass calibrator, using previous info
                 # Include best previous gain tables here?
-                gaincal(vis=obs_vis, caltable=f'{tab_name}.G0i', field=bcal, spw='0', refant=ref_ant, refantmode='strict', calmode='p', 
+                gaincal(vis=obs_vis, caltable=f'{tab_name}.G0i', field=bandpass_calibrator, spw='0', refant=ref_ant, refantmode='strict', calmode='p', 
                         solint='inf', gaintable=[leakage], parang=True)
-                gaincal(vis=obs_vis, caltable=f'{tab_name}.G1i', field=bcal, spw='0', refant=ref_ant, refantmode='strict', calmode='a', 
+                gaincal(vis=obs_vis, caltable=f'{tab_name}.G1i', field=bandpass_calibrator, spw='0', refant=ref_ant, refantmode='strict', calmode='a', 
                         solint='100', preavg=1, minblperant=1, minsnr=0, gaintype='G', gaintable=[f'{tab_name}.G0i', leakage], parang=True)
 
                 # Redo delays
-                gaincal(vis=obs_vis, caltable=f'{tab_name}.K0i', field=bcal, spw='0', refant=ref_ant, solint='inf', combine='scan', 
+                gaincal(vis=obs_vis, caltable=f'{tab_name}.K0i', field=bandpass_calibrator, spw='0', refant=ref_ant, solint='inf', combine='scan', 
                         preavg=1, minblperant=1, gaintype='K', gaintable=[f'{tab_name}.G0i', f'{tab_name}.G1i', kcross], parang=True)
 
                 # Redo bandpass with the new gain, delays, and leakage
-                bandpass(vis=obs_vis, caltable=f'{tab_name}.B0i', field=bcal, spw='0', refant=ref_ant,
+                bandpass(vis=obs_vis, caltable=f'{tab_name}.B0i', field=bandpass_calibrator, spw='0', refant=ref_ant,
                         bandtype='B', gaintable=[f'{tab_name}.G0i', f'{tab_name}.G1i', f'{tab_name}.K0i', leakage], parang=True)
 
                 # Redo gain with new preliminary gain, bandpass, delays, leakage
-                gaincal(vis=obs_vis, caltable=f'{tab_name}.G2i', field=bcal, spw='0', refant=ref_ant, calmode='ap', solint='300', 
+                gaincal(vis=obs_vis, caltable=f'{tab_name}.G2i', field=bandpass_calibrator, spw='0', refant=ref_ant, calmode='ap', solint='300', 
                         gaintable=[f'{tab_name}.K0i', f'{tab_name}.B0i', leakage, f'{tab_name}.G0i', f'{tab_name}.G1i', ], parang=True)
                 
                 # Redo phase calibrator gain absorbing parallactic angle contribution
-                gaincal(vis=obs_vis, caltable=f'{tab_name}.G3i', field=pcal, spw='0', refant=ref_ant, calmode='ap', solint='300', 
+                gaincal(vis=obs_vis, caltable=f'{tab_name}.G3i', field=phase_calibrator, spw='0', refant=ref_ant, calmode='ap', solint='300', 
                         gaintable=[f'{tab_name}.K0i', f'{tab_name}.B0i', f'{tab_name}.G2i', leakage, f'{tab_name}.G0i', f'{tab_name}.G1i'])
 
                 # Redo Stokes model from gains
@@ -389,30 +392,30 @@ if iterate_calibration:
 
                 # Redo phase calibrator gain with new model and all previous tables
                 gaincal(vis=obs_vis, caltable=f'{tab_name}_pol.G3i', refant=ref_ant, refantmode='strict', solint='300', calmode='ap', 
-                        field=pcal, smodel=qu_model_i[pcal]['Spw0'], parang=True, gaintable=[f'{tab_name}.K0i', f'{tab_name}.B0i', f'{tab_name}.G2i', 
+                        field=phase_calibrator, smodel=qu_model_i[phase_calibrator]['Spw0'], parang=True, gaintable=[f'{tab_name}.K0i', f'{tab_name}.B0i', f'{tab_name}.G2i', 
                         leakage, f'{tab_name}.G0i', f'{tab_name}.G1i'])
 
                 # Redo X-Y phase offsets now that the full calibration has been repeated with an estimate of instrumental polarization
 
                 # Set flux model for phase calibrator
-                setjy(vis=obs_vis, field=pcal, standard='Perley-Butler 2017', usescratch=True)
+                setjy(vis=obs_vis, field=phase_calibrator, standard='Perley-Butler 2017', usescratch=True)
         
                 # Kcross
                 gaincal(vis=obs_vis, caltable=f'{tab_name}_pol.Kcross0i', spw='0', refant=ref_ant, solint='inf', 
-                        field=pcal, gaintype='KCROSS', combine='scan', smodel=[1, 0, 1, 0], calmode='ap', 
+                        field=phase_calibrator, gaintype='KCROSS', combine='scan', smodel=[1, 0, 1, 0], calmode='ap', 
                         minblperant=1, refantmode='strict', parang=True)
 
                 # X-Y phase offsets
                 S_model = polcal(vis=obs_vis, caltable=f'{tab_name}_pol.Xfparangi',
-                        field=pcal, spw='0',
+                        field=phase_calibrator, spw='0',
                         solint='inf', combine='scan', preavg=300,
-                        smodel=qu_model[pcal]['Spw0'], poltype='Xfparang+QU',
+                        smodel=qu_model[phase_calibrator]['Spw0'], poltype='Xfparang+QU',
                         gaintable=[f'{tab_name}.B0i', f'{tab_name}.G0i', f'{tab_name}.G1i', f'{tab_name}.G2i', f'{tab_name}_pol.G3i',
                                 f'{tab_name}_pol.Kcross0i', leakage])
 
                 # Redo leakage calibration with self-calibrated tables
                 polcal(vis=obs_vis, caltable=f'{tab_name}_pol.D0i', field='0', spw='0', solint='inf', combine='scan', preavg=300,
-                        smodel=qu_model[pcal]['Spw0'], poltype='Dflls', refant='', 
+                        smodel=qu_model[phase_calibrator]['Spw0'], poltype='Dflls', refant='', 
                         gaintable=[f'{tab_name}.B0i', f'{tab_name}.G0i', f'{tab_name}.G1i' f'{tab_name}.G2i', f'{tab_name}_pol.G3i',f'{tab_name}_pol.Kcross0i', 
                                 f'{tab_name}_pol.Xfparangi'])
 
@@ -431,9 +434,9 @@ if iterate_calibration:
 ### Imaging
 
 if do_image:
-        # Split out bcal, pcal, target
-        mstransform(vis=f'{tab_name}_pol_cal.ms', outputvis=f"{bcal}_calibrated.ms", antenna='!*&&&', field=bcal, datacolumn='DATA')
-        mstransform(vis=f'{tab_name}_pol_cal.ms', outputvis=f"{pcal}_calibrated.ms", antenna='!*&&&', field=pcal, datacolumn='DATA')
+        # Split out bandpass_calibrator, phase_calibrator, target
+        mstransform(vis=f'{tab_name}_pol_cal.ms', outputvis=f"{bandpass_calibrator}_calibrated.ms", antenna='!*&&&', field=bandpass_calibrator, datacolumn='DATA')
+        mstransform(vis=f'{tab_name}_pol_cal.ms', outputvis=f"{phase_calibrator}_calibrated.ms", antenna='!*&&&', field=phase_calibrator, datacolumn='DATA')
         mstransform(vis=f'{tab_name}_pol_cal.ms', outputvis=f"{target}_calibrated.ms", antenna='!*&&&', field=target, datacolumn='DATA')
 
         # Get maximum baseline
@@ -450,10 +453,10 @@ if do_image:
         cell = ((3.e8 / nu_max) / B_max) * (180. / np.pi) * 3600. / 8.
 
         # Image bandpass calibrator
-        obs_vis = f"{bcal}_calibrated.ms"
-        os.makedirs(f"./IMAGES/{bcal}/")
+        obs_vis = f"{bandpass_calibrator}_calibrated.ms"
+        os.makedirs(f"./IMAGES/{bandpass_calibrator}/")
 
-        image_base = f'IMAGES/{bcal}/{bcal}_briggs0_{round(cell, 2)}arcsec'
+        image_base = f'IMAGES/{bandpass_calibrator}/{bandpass_calibrator}_briggs0_{round(cell, 2)}arcsec'
 
         tclean(vis=obs_vis, weighting='briggs', robust=0, imagename=f"{image_base}_dirty", 
         cell=f"{cell}arcsec", imsize=[2048,2048], pblimit=-1, deconvolver='mtmfs')
@@ -464,12 +467,12 @@ if do_image:
         tclean(vis=obs_vis, weighting='briggs', robust=0, imagename=f"{image_base}_clean_iter2", 
         cell=f"{cell}arcsec", imsize=[2048,2048], niter=1000, threshold = f"{clean_rms*5.}Jy", pblimit=-1,deconvolver='mtmfs')
 
-        calibrator_diagnostics(image_base=image_base, cell_size=cell, calibrator=bcal)
+        calibrator_diagnostics(image_base=image_base, cell_size=cell, calibrator=bandpass_calibrator)
 
         # Image phase/polarization calibrator (SPLIT OUT PHASE CAL)
-        obs_vis = f"{pcal}_calibrated.ms"
-        os.makedirs(f"./IMAGES/{pcal}/")
-        image_base = f'IMAGES/{pcal}/{pcal}_briggs0_{round(cell, 2)}arcsec'
+        obs_vis = f"{phase_calibrator}_calibrated.ms"
+        os.makedirs(f"./IMAGES/{phase_calibrator}/")
+        image_base = f'IMAGES/{phase_calibrator}/{phase_calibrator}_briggs0_{round(cell, 2)}arcsec'
 
         tclean(vis=obs_vis, weighting='briggs', robust=0, imagename=f"{image_base}_dirty", 
         cell=f"{cell}arcsec", imsize=[2048,2048], pblimit=-1, deconvolver='mtmfs')
@@ -480,7 +483,7 @@ if do_image:
         tclean(vis=obs_vis, weighting='briggs', robust=0, imagename=f"{image_base}_clean_iter2", 
         cell=f"{cell}arcsec", imsize=[2048,2048], niter=1000, threshold = f"{clean_rms*5.}Jy", pblimit=-1,deconvolver='mtmfs')
 
-        calibrator_diagnostics(image_base=image_base, cell_size=cell, calibrator=pcal)
+        calibrator_diagnostics(image_base=image_base, cell_size=cell, calibrator=phase_calibrator)
 
         # Image target (SPLIT OUT ONLY TARGET DATA)
         obs_vis = f"{target}_calibrated.ms"
