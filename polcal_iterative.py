@@ -8,11 +8,8 @@
 # Add in provision for length of pol cal scans?
 # Test iterative calibration and allow re-calibrated ms to be used for imaging
 # Stokes maps
-# Allow for different polcal and phasecal
 # Make a list of if_dosteps instead
 
-# We'll do a parang=True calibration of all gaincals to do the fluxscaling
-# Then we'll re-calibrate
 # And do separate applycals for each field
 
 #############################
@@ -255,21 +252,12 @@ if use_3c286:
         Xfparang = Xfparang_path.split('/')[-1]
         leakage = leakage_path.split('/')[-1]
 
-        applycal(vis=obs_vis, gaintable=[f'{tab_name}.K0', f'{tab_name}.B0', f'{tab_name}.G2', f'{tab_name}.G3', kcross, Xfparang, leakage], parang=True)
-        # applycal(vis=obs_vis, gaintable=[kcross, Xfparang, leakage], parang=True)
-
-        # Save out a calibrated measurement set
-
-        split(obs_vis, outputvis=f'{tab_name}_pol_cal.ms', datacolumn='corrected')
-
-
 ### Try on the fly with a strongly polarized calibrator
 else:
-        # If using phase calibrator for polarization calibration, we allow the gains to absorb the parallactic angle 
-        # variation so that we can use it to calculate the phase_calibrator Stokes model
-
+        # Re-calibrate the polarization calibrator, allowing the gains to absorb the parallactic 
+        # angle variation so that we can use it to calculate the polarization calibrator Stokes model
         gaincal(vis=obs_vis, caltable=f'{tab_name}.G3', field=polarization_calibrator, spw=spw, refant=ref_ant, calmode='ap', solint='300', 
-                gaintable=[f'{tab_name}.K0', f'{tab_name}.B0'])
+                gaintable=[f'{tab_name}.K0', f'{tab_name}.B0'], parang=False)
         
         # Calculate Stokes model from gains
         qu_model = polfromgain(vis=obs_vis, tablein=f'{tab_name}.G3')
@@ -277,13 +265,12 @@ else:
 
         # Redo gaincal with Stokes model; this does not absorb polarization signal
         gaincal(vis=obs_vis, caltable=f'{tab_name}_pol.G3', refant=ref_ant, refantmode='strict', solint='300', calmode='ap', spw=spw,
-                field=polarization_calibrator, smodel=qu_model[phase_calibrator]['Spw0'], parang=True, gaintable=[f'{tab_name}.K0', f'{tab_name}.B0'])
+                field=polarization_calibrator, smodel=qu_model[polarization_calibrator]['Spw0'], parang=True, gaintable=[f'{tab_name}.K0', f'{tab_name}.B0'])
         
         # Redo Stokes model to check for residual gains; should be close to zero
         qu_model_calibrated = polfromgain(vis=obs_vis, tablein=f'{tab_name}_pol.G3')
+        print(f"Stokes model calculated from gains corrected for Stokes model: {qu_model_calibrated}")
 
-
-        ##################################################
         # Best scan to calibrate cross-hands will be where the polarization signal is 
         # minimum in XX and YY (i.e., maximum in XY and YX); find the scan using the
         # gain calibration for the phase/polarization calibrator
@@ -302,9 +289,8 @@ else:
         best_scan_index = np.argmin(ratios)
         best_scan = scan_list[best_scan_index]
         print(f"Scan with highest expected X-Y signal: {best_scan}")
-        #####################################################
         
-        # Kcross
+        # Kcross calibration
         gaincal(vis=obs_vis, caltable=f'{tab_name}_pol.Kcross0', spw=pol_spw, refant=ref_ant, solint='inf', 
                field=phase_calibrator, gaintype='KCROSS', scan=str(best_scan), smodel=[1, 0, 1, 0], calmode='ap', 
                minblperant=1, refantmode='strict', parang=True)
@@ -330,26 +316,36 @@ else:
         Xfparang = f'{tab_name}_pol.Xfparang'
         leakage = f'{tab_name}_pol.D0'
 
-        applycal(vis=obs_vis, gaintable=[f'{tab_name}.K0', f'{tab_name}.B0', f'{tab_name}.G2', kcross, 
-                                         Xfparang, leakage], parang=True)
+
+#############################################################################
+        
+# Apply calibration
+
+#############################################################################
+
+if use_3c286:
+        applycal(vis=obs_vis, gaintable=[f'{tab_name}.K0', f'{tab_name}.B0', f'{tab_name}.G2', kcross, Xfparang, leakage], parang=True)
 
         # Save out a calibrated measurement set
-        split(vis=obs_vis, outputvis=f'{tab_name}_pol_cal.ms', datacolumn='corrected')
+        split(obs_vis, outputvis=f'{tab_name}_calibrated.ms', datacolumn='corrected')
 
-### Try on the fly with unpolarized cal
+else:
+        applycal(vis=obs_vis, gaintable=[f'{tab_name}.K0', f'{tab_name}.B0', f'{tab_name}.G2', kcross, Xfparang, leakage], parang=True)
 
-    # VERDICT: this is not possible with current CASA
-    # It would involve using 'Dflls' or 'Df' followed by 'Xf'; it states about 'Dflls'
-    # (Had we used an unpolarized calibrator, we would not have a valid xy-phase solution, 
-    # nor would we have had access to the absolute instrumental polarization solution 
-    # demonstrated here.). The alternative options strictly state they cannot be used
-    # for the linear basis and will give bad solutions.
+        # Save out a calibrated measurement set
+        split(vis=obs_vis, outputvis=f'{tab_name}_calibrated.ms', datacolumn='corrected')
 
-# Iterate calibration with D-term solution and save out another calibrated ms
+
+#############################################################################
+        
+# Iterate calibration
+
+#############################################################################
 
 if iterate_calibration:
-
+        # Could allow repeating multiple times
         if use_3c286:
+                # If using 3c286, this could be done from the start; pass for now
                 pass
         else:
                 # Begin gain calibration again on the uncorrected bandpass calibrator, using previous info
@@ -384,9 +380,6 @@ if iterate_calibration:
                         leakage, f'{tab_name}.G0i', f'{tab_name}.G1i'])
 
                 # Redo X-Y phase offsets now that the full calibration has been repeated with an estimate of instrumental polarization
-
-                # Set flux model for phase calibrator
-                setjy(vis=obs_vis, field=phase_calibrator, standard='Perley-Butler 2017', usescratch=True)
         
                 # Kcross
                 gaincal(vis=obs_vis, caltable=f'{tab_name}_pol.Kcross0i', spw='0', refant=ref_ant, solint='inf', 
@@ -419,7 +412,11 @@ if iterate_calibration:
                 split(vis=obs_vis, outputvis=f'{tab_name}_pol_cal_i.ms', datacolumn='corrected')
 
 
-### Imaging
+#############################################################################
+        
+# Imaging
+
+#############################################################################
 
 if do_image:
         # Split out bandpass_calibrator, phase_calibrator, target
@@ -501,11 +498,3 @@ if do_image:
                 gridder='standard', imsize=[2048,2048], cell=f"{cell}arcsec", weighting='briggs', niter=100, stokes='V')
         tclean(vis=f'{target}_calibrated.ms', imagename=f'{image_base}_V_clean_iter_1000', spw='0', specmode='mfs', deconvolver='mtmfs', 
         gridder='standard', imsize=[2048,2048], cell=f"{cell}arcsec", weighting='briggs', niter=1000, stokes='V')
-
-
-
-
-
-        # Produce Stokes maps
-
-        ##############################################################################################################
