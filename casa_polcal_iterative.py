@@ -25,13 +25,14 @@ import numpy as np
 # pcal = '2343+538'
 # target = 'CasA'
 bcal = '3c286'
-pcal = '3c286'
-target = '3c286'
+pcal = '1804+010'
+pol_cal = '3c286'
+target = '3c391'
 ref_ant = '40'
 pol_spw = '0:50~167'              # Measurement set should have only one spectral window, 
                                   # use to constrain bandpass used for polcal
 # obs_vis = 'CasA_obs.ms'
-obs_vis = '3c286_obs.ms'
+obs_vis = '3c391_obs.ms'
 
 use_3c286 = False
 generate_plots = True
@@ -104,7 +105,7 @@ if generate_plots:
 gaincal(vis=obs_vis, caltable=f'{tab_name}.G2', field=bcal, spw='0', refant=ref_ant, calmode='ap', solint='300', 
         gaintable=[f'{tab_name}.K0', f'{tab_name}.B0'], parang=True)
 if use_3c286:
-        gaincal(vis=obs_vis, caltable=f'{tab_name}.G3', field='0', spw='0', refant=ref_ant, calmode='ap', solint='300', 
+        gaincal(vis=obs_vis, caltable=f'{tab_name}.G3', field=pcal, spw='0', refant=ref_ant, calmode='ap', solint='300', 
                 gaintable=[f'{tab_name}.K0', f'{tab_name}.B0', f'{tab_name}.G2'], parang=True)
 
         if generate_plots:
@@ -133,7 +134,7 @@ if use_3c286:
 else:
         # If using phase calibrator for polarization calibration, we allow the gains to absorb the parallactic angle 
         # variation so that we can use it to calculate the pcal Stokes model
-        gaincal(vis=obs_vis, caltable=f'{tab_name}.G3', field=pcal, spw='0', refant=ref_ant, calmode='ap', solint='300', 
+        gaincal(vis=obs_vis, caltable=f'{tab_name}.G3', field=pol_cal, spw='0', refant=ref_ant, calmode='ap', solint='300', 
                 gaintable=[f'{tab_name}.K0', f'{tab_name}.B0', f'{tab_name}.G2'])
         
         # Calculate Stokes model from gains
@@ -142,7 +143,7 @@ else:
 
         # Redo gaincal with Stokes model; this does not absorb polarization signal
         gaincal(vis=obs_vis, caltable=f'{tab_name}_pol.G3', refant=ref_ant, refantmode='strict', solint='300', calmode='ap', 
-                field=pcal, smodel=qu_model[pcal]['Spw0'], parang=True, gaintable=[f'{tab_name}.K0', f'{tab_name}.B0', f'{tab_name}.G2'])
+                field=pol_cal, smodel=qu_model[pol_cal]['Spw0'], parang=True, gaintable=[f'{tab_name}.K0', f'{tab_name}.B0', f'{tab_name}.G2'])
         
         # Redo Stokes model to check for residual gains; should be close to zero
         qu_model_calibrated = polfromgain(vis=obs_vis, tablein=f'{tab_name}_pol.G3')
@@ -247,7 +248,7 @@ else:
         
         # Kcross
         gaincal(vis=obs_vis, caltable=f'{tab_name}_pol.Kcross0', spw=pol_spw, refant=ref_ant, solint='inf', 
-               field=pcal, gaintype='KCROSS', scan=str(best_scan), smodel=[1, 0, 1, 0], calmode='ap', 
+               field=pol_cal, gaintype='KCROSS', scan=str(best_scan), smodel=[1, 0, 1, 0], calmode='ap', 
                minblperant=1, refantmode='strict', parang=True)
 
         if generate_plots:
@@ -260,15 +261,15 @@ else:
         # Note that CASA calculates a Stokes model for the source in this step as well, but it will be incorrect!
         # The X-Y phase offset table generated here seems to be accurate
         S_model = polcal(vis=obs_vis, caltable=f'{tab_name}_pol.Xfparang',
-                  field=pcal, spw=pol_spw,
+                  field=pol_cal, spw=pol_spw,
                   solint='inf', combine='scan', preavg=300,
-                  smodel=qu_model[pcal]['Spw0'], poltype='Xfparang+QU',
+                  smodel=qu_model[pol_cal]['Spw0'], poltype='Xfparang+QU',
                   gaintable=[f'{tab_name}.B0', f'{tab_name}.G0', f'{tab_name}.G1', f'{tab_name}.G2', f'{tab_name}_pol.G3',
                              f'{tab_name}_pol.Kcross0'])
                              
         # Solve for leakage terms
         polcal(vis=obs_vis, caltable=f'{tab_name}_pol.D0', field='0', spw=pol_spw, solint='inf', combine='scan', preavg=300,
-              smodel=qu_model[pcal]['Spw0'], poltype='Dflls', refant='', 
+              smodel=qu_model[pol_cal]['Spw0'], poltype='Dflls', refant='', 
               gaintable=[f'{tab_name}.B0', f'{tab_name}.G0', f'{tab_name}.G1', f'{tab_name}.G2', f'{tab_name}_pol.G3',f'{tab_name}_pol.Kcross0', 
                          f'{tab_name}_pol.Xfparang'])
 
