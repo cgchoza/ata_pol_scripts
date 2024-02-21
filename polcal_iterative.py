@@ -42,7 +42,7 @@ obs_vis = '3c391_obs.ms'
 use_3c286 = False
 generate_plots = True
 iterate_calibration = False
-do_image = False
+do_image = True
 
 tab_name = obs_vis.split('.')[0]
 
@@ -224,7 +224,7 @@ bandpass(vis=obs_vis, caltable=f'{tab_name}.B0', field=bandpass_calibrator, spw=
 # For fluxscale to work, we need a gain table with flux cal field and other gain calibrators both present
 # Gaintype T to preserve the relative gains of XY feeds, needs testing
 print("Second round gain calibration")
-gaincal(vis=obs_vis, caltable=f'{tab_name}.G2', field=bandpass_calibrator, spw=spw, refant=ref_ant, calmode='ap', solint='300', 
+gaincal(vis=obs_vis, caltable=f'{tab_name}.G2', field=gain_calibrators, spw=spw, refant=ref_ant, calmode='ap', solint='300', 
         gaintype='G', minsnr=0, gaintable=[f'{tab_name}.K0', f'{tab_name}.B0'], parang=True)
 
 # # Fluxscale if bootstrapping
@@ -267,7 +267,7 @@ else:
         # gaincal(vis=obs_vis, caltable=f'{tab_name}.G3', field=polarization_calibrator, spw=spw, refant=ref_ant, calmode='ap', solint='300', 
         #         gaintype='G', minsnr=0, gaintable=[f'{tab_name}.K0', f'{tab_name}.B0', f'{tab_name}.G2'])
         gaincal(vis=obs_vis, caltable=f'{tab_name}.G3', field=polarization_calibrator, spw=spw, refant=ref_ant, solint='300', 
-                gaintable=[f'{tab_name}.K0', f'{tab_name}.B0', f'{tab_name}.G2'])
+                gaintype='G',gaintable=[f'{tab_name}.K0', f'{tab_name}.B0', f'{tab_name}.G2'])
 
         # Calculate Stokes model from gains
         qu_model = polfromgain(vis=obs_vis, tablein=f'{tab_name}.G3')
@@ -275,7 +275,7 @@ else:
 
         # Redo gaincal with Stokes model; this does not absorb polarization signal
         gaincal(vis=obs_vis, caltable=f'{tab_name}_pol.G3', refant=ref_ant, refantmode='strict', solint='300', calmode='ap', spw=spw,
-                field=polarization_calibrator, smodel=qu_model[polarization_calibrator]['Spw0'], parang=True, 
+                field=polarization_calibrator, smodel=qu_model[polarization_calibrator]['Spw0'], parang=True, gaintype='G',
                 gaintable=[f'{tab_name}.K0', f'{tab_name}.B0', f'{tab_name}.G2'])
         
         # Redo Stokes model to check for residual gains; should be close to zero
@@ -365,7 +365,7 @@ else:
                 print("Applying calibration: polarization calibrator")
                 applycal(vis=obs_vis, field=polarization_calibrator,
                         selectdata=False, calwt=False, gaintable=[f'{tab_name}.K0', f'{tab_name}.G2', f'{tab_name}_pol.G3', f'{tab_name}.B0', kcross, Xfparang, leakage],
-                        gainfield=[bandpass_calibrator, phase_calibrator, polarization_calibrator, bandpass_calibrator, polarization_calibrator, polarization_calibrator, polarization_calibrator],
+                        gainfield=[bandpass_calibrator, polarization_calibrator, polarization_calibrator, bandpass_calibrator, polarization_calibrator, polarization_calibrator, polarization_calibrator],
                         parang=True, interp='nearest,linearflag,nearest,nearest,nearest,nearest,nearest')
                 
         print("Applying calibration: phase calibrator and target")

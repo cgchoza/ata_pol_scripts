@@ -1,4 +1,4 @@
-#!/opt/mnt/miniconda3/bin/python
+#!/home/cchoza/.conda/envs/obs_plan/bin/python
 
 import pandas as pd
 from astropy.coordinates import SkyCoord
