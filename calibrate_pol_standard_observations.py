@@ -27,7 +27,7 @@ phase_calibrator = '1330+251'
 primary_calibrator = '3c286'
 
 # Visibility file
-obs_vis = 'standard_polcal_set_9GHz.ms'
+obs_vis = 'standard_polcal_set_6.3GHz.ms'
 
 # Script choices
 generate_plots = True
@@ -36,7 +36,7 @@ iterate_calibration = False
 # CASA machinery
 ref_ant = '40'
 spw = '0'
-pol_spw = '0:40~167'
+pol_spw = '0'
 tab_name = obs_vis.split('.')[0]
 
 antennas = ['1b', '1c', '1e', '1g', '1h', '1k',
@@ -49,7 +49,7 @@ antenna_list = ','.join([f'"{a}"' for a in antennas])
 # Define useful functions
 #############################################################################
 
-# Shamelessly copied for a test from the MeerKAT pipeline. See if a deliberate calculation is superior to polfromgain for known calibrator
+# Borrowed from  MeerKAT pipeline for testing if a deliberate calculation is superior to polfromgain for known calibrator
 def qu_polfield(polfield, visname):
     """
     Given the pol source name and the reference frequency, returns the fractional Q and U
@@ -189,7 +189,7 @@ def generate_plots(use_3c286: bool = False):
                 plotms(vis=f'{tab_name}_calibrated.ms', xdatacolumn='corrected', ydatacolumn='corrected',
                         xaxis='real', yaxis='imag', coloraxis='corr', field=primary_calibrator,
                         avgtime='100000', avgscan=True, avgchannel='168', spw='0',
-                        plotfile=f'{tab_name}__parang_corrected_reim.png')
+                        plotfile=f'{tab_name}_parang_corrected_reim.png')
 
         
                 # Plots of phase-frequency and real/imaginary leakage terms by antenna
@@ -201,21 +201,6 @@ def generate_plots(use_3c286: bool = False):
                                         coloraxis='corr', iteraxis='antenna', gridrows=4, gridcols=5,
                                         yselfscale=True, antenna=antenna_list,
                                         plotfile=f'D0_{tab_name}_pol_{ax}.png', overwrite=True)
-                                
-                for ax in ['real', 'imag']:
-                                # Real and imaginary components versus parallactic angle for polarization calibrator
-                        plotms(vis=f'{tab_name}_calibrated.ms', ydatacolumn='corrected', xaxis='parang', yaxis=ax,
-                                coloraxis='corr', field=primary_calibrator, avgchannel='168', spw='0',
-                                plotfile=f'{tab_name}_parang_corrected_{ax}_vs_parang.png', overwrite=True)
-                        # Real and imaginary components versus frequency for polarization calibrator
-                        plotms(vis=f'{tab_name}_calibrated.ms', ydatacolumn='corrected', xaxis='freq', yaxis=ax,
-                                coloraxis='corr', field=primary_calibrator, avgtime='100000', avgscan=True, spw='0',
-                                plotfile=f'{tab_name}_parang_corrected_{ax}_vs_freq.png', overwrite=True)
-                        # Parallactic angle-corrected real vs imaginary components for polarization calibrator
-                plotms(vis=f'{tab_name}_calibrated.ms', xdatacolumn='corrected', ydatacolumn='corrected',
-                        xaxis='real', yaxis='imag', coloraxis='corr', field=primary_calibrator,
-                        avgtime='100000', avgscan=True, avgchannel='168', spw='0',
-                        plotfile=f'{tab_name}_parang_corrected_reim.png')
 
 
 #############################################################################
@@ -241,26 +226,26 @@ print("Preliminary gaincal")
 # Preliminary gaincal
 # This will be thrown away after solving for delay and bandpass
 gaincal(vis=obs_vis, caltable=f'{tab_name}.G0', field=primary_calibrator, spw=spw, refant=ref_ant, refantmode='strict', calmode='p', 
-        solint='inf', parang=True)
+        solint='inf', parang=True, minsnr=0, minblperant=1)
 gaincal(vis=obs_vis, caltable=f'{tab_name}.G1', field=primary_calibrator, spw=spw, refant=ref_ant, refantmode='strict', calmode='a', 
         solint='100', preavg=1, minblperant=1, minsnr=0, gaintype='G', gaintable=[f'{tab_name}.G0'], parang=True)
 
 print("Delay calibration")
 # Delay calibration
 gaincal(vis=obs_vis, caltable=f'{tab_name}.K0', field=primary_calibrator, spw=spw, refant=ref_ant, solint='inf', combine='scan', 
-        preavg=1, minblperant=1, gaintype='K', gaintable=[f'{tab_name}.G0', f'{tab_name}.G1'], parang=True)
+        preavg=1, minsnr=0, minblperant=1, gaintype='K', gaintable=[f'{tab_name}.G0', f'{tab_name}.G1'], parang=True)
 
 print("Bandpass calibration")
 # Bandpass
 # NOTE: low freq spectral windows so we'll use a small averaging window, may be appropriate to allow edit
 bandpass(vis=obs_vis, caltable=f'{tab_name}.B0', field=primary_calibrator, spw=spw, refant=ref_ant,
-         bandtype='B', gaintable=[f'{tab_name}.G0', f'{tab_name}.G1', f'{tab_name}.K0'], parang=True)
+         bandtype='B', gaintable=[f'{tab_name}.G0', f'{tab_name}.G1', f'{tab_name}.K0'], parang=True, minsnr=0, minblperant=1)
 
 # For fluxscale to work, we need a gain table with flux cal field and other gain calibrators both present
 # Gaintype T to preserve the relative gains of XY feeds, needs testing
 print("Second round gain calibration")
 gaincal(vis=obs_vis, caltable=f'{tab_name}.G2', field=f'{primary_calibrator},{phase_calibrator}', spw=spw, refant=ref_ant, calmode='ap', solint='300', 
-        gaintype='G', minsnr=0, gaintable=[f'{tab_name}.K0', f'{tab_name}.B0', f'{tab_name}.G0', f'{tab_name}.G1'], parang=True)
+        gaintype='G', minsnr=0, gaintable=[f'{tab_name}.K0', f'{tab_name}.B0', f'{tab_name}.G0', f'{tab_name}.G1'], parang=True, minblperant=1)
 
 # # Fluxscale if bootstrapping
 # if len(gain_calibrators.split(',')) > 1:
@@ -334,7 +319,7 @@ S_model = polcal(vis=obs_vis, caltable=f'{tab_name}_pol.Xfparang',
 
 print(f'Stokes parameters from Xfparang: {S_model}')
 # Solve for leakage terms
-polcal(vis=obs_vis, caltable=f'{tab_name}_pol.D0', field=primary_calibrator, spw=pol_spw, solint='inf', combine='scan', preavg=60,
+polcal(vis=obs_vis, caltable=f'{tab_name}_pol.D0', field=primary_calibrator, spw=pol_spw, solint='inf', combine='scan', preavg=120,
         smodel=qu_model[primary_calibrator]['Spw0'], poltype='Dflls', refant='', 
         gaintable=[f'{tab_name}.B0', f'{tab_name}.G2', f'{tab_name}_pol.G3', f'{tab_name}_pol.Kcross0', 
                         f'{tab_name}_pol.Xfparang'])

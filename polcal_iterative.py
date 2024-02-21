@@ -129,22 +129,6 @@ def generate_plots(use_3c286: bool = False):
                 plotms(vis=f'{tab_name}_pol.Kcross0', yaxis='delay', spw='0',
                         antenna=ref_ant, coloraxis='corr',
                         plotfile=f'{tab_name}_Kcross0.png', overwrite=True)
-                
-                for ax in ['real', 'imag']:
-                                # Real and imaginary components versus parallactic angle for polarization calibrator
-                                plotms(vis=f'{tab_name}_calibrated.ms', ydatacolumn='corrected', xaxis='parang', yaxis=ax,
-                                        coloraxis='corr', field=polarization_calibrator, avgchannel='168', spw='0',
-                                        plotfile=f'{tab_name}_parang_corrected_{ax}_vs_parang.png', overwrite=True)
-                                # Real and imaginary components versus frequency for polarization calibrator
-                                plotms(vis=f'{tab_name}_calibrated.ms', ydatacolumn='corrected', xaxis='freq', yaxis=ax,
-                                        coloraxis='corr', field=polarization_calibrator, avgtime='100000', avgscan=True, spw='0',
-                                        plotfile=f'{tab_name}_parang_corrected_{ax}_vs_freq.png', overwrite=True)
-                # Parallactic angle-corrected real vs imaginary components for polarization calibrator
-                plotms(vis=f'{tab_name}_calibrated.ms', xdatacolumn='corrected', ydatacolumn='corrected',
-                        xaxis='real', yaxis='imag', coloraxis='corr', field=polarization_calibrator,
-                        avgtime='100000', avgscan=True, avgchannel='168', spw='0',
-                        plotfile=f'{tab_name}__parang_corrected_reim.png')
-
         
                 # Plots of phase-frequency and real/imaginary leakage terms by antenna
                 plotms(vis=f'{tab_name}_pol.Xfparang', xaxis='freq', yaxis='gainphase',
