@@ -7,8 +7,6 @@
 # TODO: Reformat to run by-spectral-window to process an observation of the
 # observe_3c286_pol format
 
-# Add separate applycals for each field
-
 # Imports
 import glob
 import os, sys
@@ -16,7 +14,14 @@ import glob
 import subprocess
 import numpy as np
 
+# NOTE s from Krishna meeting:
+# MOST IMPORTANT: SETJY CALL MUST BE FIXED TO INCLUDE POLARIZATION CALIBRATOR POL MODEL
+# SECOND: POLQU, IF YOU WANT TO USE IT, MUST BE EXPANDED TO INCLUDE HIGHER FREQUENCIES FROM PERLEY AND BUTLER
+# THIRD: IT IS HIGHLY WORTH INCLUDING AN UNPOLARIZED BANDPASS CALIBRATOR AND USING TROPOSPHERIC GAIN TYPE AS A SANITY CHECK
+# NOTE THAT THE THIRD STEP COULD MEAN YOU COULD GET A MUCH BETTER POL CALIBRATION OF THE 3C391 DATA FROM YOUR EXISTING OBSERVATION
 
+# Important to test XY phase stability over course of days
+# Test if Kcross is actually necessary at all at lower frequencies, and if it throws things off at higher freq to not include
 
 #############################################################################
 # Define necessary fields, load files, fix and separate scans
@@ -27,10 +32,10 @@ phase_calibrator = '1330+251'
 primary_calibrator = '3c286'
 
 # Visibility file
-obs_vis = 'standard_polcal_set_6.3GHz.ms'
+obs_vis = 'standard_polcal_set_3GHz.ms'
 
 # Script choices
-generate_plots = True
+generate_plots = False
 iterate_calibration = False
 
 # CASA machinery
@@ -57,14 +62,15 @@ def qu_polfield(polfield, visname):
     """
 
     msmd.open(visname)
-    meanfreq = msmd.meanfreq(0, unit='MHz')
+    meanfreq = msmd.meanfreq(0, unit='GHz')
+    print(f"Mean frequency: {meanfreq}")
     msmd.done()
 
     if polfield in ["3c286", "1328+307", "1331+305", "J1331+3030"]:
         #f_coeff=[1.2515,-0.4605,-0.1715,0.0336]    # coefficients for model Stokes I spectrum from Perley and Butler 2013
-        perley_frac = np.array([0.086,0.095,0.099])
-        perley_f = np.array([1050,1450,1640])
-        pa_polcal = np.array([33.0,33.0,33.0])
+        perley_frac = np.array([0.086, 0.098, 0.101, 0.106, 0.112, 0.115, 0.119, 0.121, 0.123])
+        perley_f = np.array([1.02, 1.47, 1.87, 2.57, 3.57, 4.89, 6.68, 8.43, 11.3])
+        pa_polcal = np.array([33.0]*8 + [34.0])
     elif polfield in ["3C138", "0518+165", "0521+166", "J0521+1638"]:
         #f_coeff=[1.0332,-0.5608,-0.1197,0.041]    # coefficients for model Stokes I spectrum from Perley and Butler 2013
         perley_frac = np.array([0.056,0.075,0.084,0.09,0.104,0.107,0.10])
@@ -103,34 +109,6 @@ def qu_polfield(polfield, visname):
     u = p(meanfreq) * np.sin(2*np.deg2rad(pa(meanfreq)))
 
     return q, u
-
-def calibrator_diagnostics(calibrator: str = '', image_base: str = '', cell_size: float = 0):
-        ia.open(f'{image_base}_clean_iter2.image.tt0')
-        maj = ia.restoringbeam()['major']['value']
-        min = ia.restoringbeam()['minor']['value']
-        pos = ia.restoringbeam()['positionangle']['value']
-        ia.close()
-
-
-        fit_name = f'./IMAGES/{calibrator}/fitting_region.crtf'
-        f = open(fit_name, 'w')
-        f.write('#CRTF\n')
-        f.write(f'circle[[1024pix, 1024pix],{cell_size * 8. * 5.}arcsec]')
-        f.close()
-
-        est_name = f'./IMAGES/{calibrator}/estimates.txt'
-        f = open(est_name, 'w')
-        f.write(f'1,1024,1024,{maj}arcsec,{min}arcsec,{pos}deg,abp')
-        f.close()
-
-        fit_results = imfit(imagename=f'{image_base}_clean_iter2.image.tt0', region=fit_name, estimates=est_name)
-        flux_density = fit_results['deconvolved']['component0']['flux']['value'][0]
-        error = fit_results['deconvolved']['component0']['flux']['error'][0]
-
-        fit_result_name = f'./IMAGES/{calibrator}/fitting_results.txt'
-        f = open(fit_result_name, 'w')
-        f.write(str(flux_density) + ',' + str(error))
-        f.close()
 
 def generate_plots(use_3c286: bool = False):
         # Plot preliminary gain amplitudes
@@ -199,25 +177,65 @@ def generate_plots(use_3c286: bool = False):
                 for ax in ['real', 'imag']:
                         plotms(vis=f'{tab_name}_pol.D0', xaxis='freq', yaxis=ax,
                                         coloraxis='corr', iteraxis='antenna', gridrows=4, gridcols=5,
-                                        yselfscale=True, antenna=antenna_list,
+                                        yselfscale=True, antenna=antenna_list, plotrange=[0,0,-0.5,0.5],
                                         plotfile=f'D0_{tab_name}_pol_{ax}.png', overwrite=True)
+                        
+def linfit(xInput, xDataList, yDataList):
+        y_predict = np.poly1d(np.polyfit(xDataList, yDataList, 1))
+        yPredict = y_predict(xInput)
+        return yPredict
 
 
 #############################################################################
 # Begin standard calibration
 #############################################################################
 
+# FLAGGING: script assumes pre-flagging using aoflagger.
+## If manual flagging desired, uncomment the below and edit to suit
+print("NOT flagging primary calibrator")
+# flagdata(vis=obs_vis, field=primary_calibrator, mode='tfcrop', datacolumn='DATA')
+# flagdata(vis=obs_vis, field=primary_calibrator, mode='rflag', datacolumn='DATA')
+# flagdata(vis=obs_vis, field=phase_calibrator, mode='tfcrop', datacolumn='DATA')
+# flagdata(vis=obs_vis, field=phase_calibrator, mode='rflag', datacolumn='DATA')
+print("Flagging bad antennas")
+flagdata(vis=obs_vis, mode='manual', antenna="'1b'", flagbackup=False)
+flagdata(vis=obs_vis, mode='manual', antenna="'1e'", flagbackup=False)
+flagdata(vis=obs_vis, mode='manual', antenna="'2k'", flagbackup=False)
+
 print("Beginning standard calibration")
 
 print(f"Gain calibrators: {primary_calibrator, phase_calibrator}")
-# FLAGGING: script assumes pre-flagging using aoflagger.
-## If manual flagging desired, uncomment the below and edit to suit
-flagdata(vis=obs_vis, mode='manual', antenna="'1b'", flagbackup=False)
-flagdata(vis=obs_vis, mode='manual', antenna="'1e'", flagbackup=False)
-# flagdata(vis=obs_vis, mode='manual', antenna="'4e'", flagbackup=False)
 
+print("Setting flux model and pol model for primary calibrator")
 # Set flux model for flux calibrator 
-setjy(vis=obs_vis, field=primary_calibrator, standard='Perley-Butler 2017', usescratch=True)
+print(f"Getting pol model for {primary_calibrator}")
+# central freq of spw
+msmd.open(obs_vis)
+spwMeanFreq = msmd.meanfreq(0, unit='GHz')
+freqList = np.array([1.02, 1.47, 1.87, 2.57, 3.57, 4.89, 6.68, 8.43, 11.3])
+# fractional linear polarisation
+fracPolList = [0.086, 0.098, 0.101, 0.106, 0.112, 0.115, 0.119, 0.121, 0.123]
+polindex = linfit(spwMeanFreq, freqList, fracPolList)
+print("Predicted polindex at frequency %s: %s", spwMeanFreq, polindex)
+# position angle of polarized intensity
+polPositionAngleList = [33]*8 + [34]
+polangle = linfit(spwMeanFreq, freqList, polPositionAngleList)
+print("Predicted pol angle at frequency %s: %s", spwMeanFreq, polangle)
+
+reffreq = "1.6GHz"
+print("Ref freq %s", reffreq)
+setjy(vis=obs_vis,
+field=primary_calibrator,
+scalebychan=True,
+standard="manual",
+fluxdensity=[-14.6, 0.0, 0.0, 0.0],
+#spix=-0.52, # between 1465MHz and 1565MHz
+reffreq=reffreq,
+polindex=[polindex],
+polangle=[polangle],
+rotmeas=0)
+
+# setjy(vis=obs_vis, field=primary_calibrator, standard='Perley-Butler 2017', usescratch=True)
 
 # Listobs
 listobs(vis=obs_vis)
@@ -226,20 +244,20 @@ print("Preliminary gaincal")
 # Preliminary gaincal
 # This will be thrown away after solving for delay and bandpass
 gaincal(vis=obs_vis, caltable=f'{tab_name}.G0', field=primary_calibrator, spw=spw, refant=ref_ant, refantmode='strict', calmode='p', 
-        solint='inf', parang=True, minsnr=0, minblperant=1)
+        solint='inf', preavg=1, minsnr=0, minblperant=1, parang=True)
 gaincal(vis=obs_vis, caltable=f'{tab_name}.G1', field=primary_calibrator, spw=spw, refant=ref_ant, refantmode='strict', calmode='a', 
-        solint='100', preavg=1, minblperant=1, minsnr=0, gaintype='G', gaintable=[f'{tab_name}.G0'], parang=True)
+        solint='100', preavg=1, minsnr=0, minblperant=1, gaintype='G', gaintable=[f'{tab_name}.G0'], parang=True)
 
 print("Delay calibration")
 # Delay calibration
 gaincal(vis=obs_vis, caltable=f'{tab_name}.K0', field=primary_calibrator, spw=spw, refant=ref_ant, solint='inf', combine='scan', 
-        preavg=1, minsnr=0, minblperant=1, gaintype='K', gaintable=[f'{tab_name}.G0', f'{tab_name}.G1'], parang=True)
+        preavg=1, gaintype='K', gaintable=[f'{tab_name}.G0', f'{tab_name}.G1'], parang=True)
 
 print("Bandpass calibration")
 # Bandpass
 # NOTE: low freq spectral windows so we'll use a small averaging window, may be appropriate to allow edit
 bandpass(vis=obs_vis, caltable=f'{tab_name}.B0', field=primary_calibrator, spw=spw, refant=ref_ant,
-         bandtype='B', gaintable=[f'{tab_name}.G0', f'{tab_name}.G1', f'{tab_name}.K0'], parang=True, minsnr=0, minblperant=1)
+         bandtype='B', gaintable=[f'{tab_name}.G0', f'{tab_name}.G1', f'{tab_name}.K0'], parang=True)
 
 # For fluxscale to work, we need a gain table with flux cal field and other gain calibrators both present
 # Gaintype T to preserve the relative gains of XY feeds, needs testing
@@ -257,20 +275,18 @@ gaincal(vis=obs_vis, caltable=f'{tab_name}.G2', field=f'{primary_calibrator},{ph
 
 # Re-calibrate the polarization calibrator, allowing the gains to absorb the parallactic 
 # angle variation so that we can use it to calculate the polarization calibrator Stokes model'
-# Set flux model for flux calibrator 
-setjy(vis=obs_vis, field=primary_calibrator, standard='Perley-Butler 2017', usescratch=True)
 
 # print(f"polarization calibrator {primary_calibrator}")
 gaincal(vis=obs_vis, caltable=f'{tab_name}.G3', field=primary_calibrator, spw=pol_spw, refant=ref_ant, solint='120', 
-        gaintype='G',gaintable=[f'{tab_name}.K0', f'{tab_name}.B0', f'{tab_name}.G2'])
+        gaintype='G',gaintable=[f'{tab_name}.K0', f'{tab_name}.B0'])
 
 # # Calculate Stokes model from gains
 qu_model = polfromgain(vis=obs_vis, tablein=f'{tab_name}.G3')
 print(f"Stokes model calculated from gains: {qu_model}")
 
-# NOTE: TESTING MEERKAT METHOD OF DIRECLTY CALCULATING QU MODEL. WILL THIS DO BETTER?
+# NOTE: Testing MeerKAT method of directly calculating QU (also for sanity check of polfromgain)
 polqu = qu_polfield(primary_calibrator, visname=obs_vis)
-print(polqu)
+print(f"Stokes model calculated with polqu: {polqu}")
 
 # Redo gaincal with Stokes model; this does not absorb polarization signal
 gaincal(vis=obs_vis, caltable=f'{tab_name}_pol.G3', refant=ref_ant, refantmode='strict', solint='120', calmode='ap', spw=spw,
@@ -309,9 +325,8 @@ gaincal(vis=obs_vis, caltable=f'{tab_name}_pol.Kcross0', spw=pol_spw, refant=ref
 # Note that CASA calculates a Stokes model for the source in this step as well, but it will be incorrect!
 # The X-Y phase offset table generated here seems to be accurate
 S_model = polcal(vis=obs_vis, caltable=f'{tab_name}_pol.Xfparang',
-                field=primary_calibrator, spw=pol_spw,
-                solint='inf', combine='scan', preavg=120,
-                smodel=qu_model[primary_calibrator]['Spw0'], poltype='Xfparang+QU',
+                field=primary_calibrator, spw=pol_spw, smodel=qu_model[primary_calibrator]['Spw0'],
+                solint='inf', combine='scan', preavg=120, poltype='Xfparang+QU',
                 gaintable=[f'{tab_name}.B0', f'{tab_name}.G2', f'{tab_name}_pol.G3',
                         f'{tab_name}_pol.Kcross0'], 
                 gainfield=[primary_calibrator, primary_calibrator, primary_calibrator, 
@@ -320,9 +335,8 @@ S_model = polcal(vis=obs_vis, caltable=f'{tab_name}_pol.Xfparang',
 print(f'Stokes parameters from Xfparang: {S_model}')
 # Solve for leakage terms
 polcal(vis=obs_vis, caltable=f'{tab_name}_pol.D0', field=primary_calibrator, spw=pol_spw, solint='inf', combine='scan', preavg=120,
-        smodel=qu_model[primary_calibrator]['Spw0'], poltype='Dflls', refant='', 
-        gaintable=[f'{tab_name}.B0', f'{tab_name}.G2', f'{tab_name}_pol.G3', f'{tab_name}_pol.Kcross0', 
-                        f'{tab_name}_pol.Xfparang'])
+       poltype='Dflls', refant='', smodel=qu_model[primary_calibrator]['Spw0'],
+       gaintable=[f'{tab_name}.B0', f'{tab_name}.G2', f'{tab_name}_pol.G3', f'{tab_name}_pol.Kcross0', f'{tab_name}_pol.Xfparang'])
 
 # Apply the tables
 kcross = f'{tab_name}_pol.Kcross0'
@@ -335,10 +349,10 @@ leakage = f'{tab_name}_pol.D0'
 #############################################################################
 
 
-applycal(vis=obs_vis, field=primary_calibrator,
-                selectdata=False, calwt=False, gaintable=[f'{tab_name}.K0', f'{tab_name}.G2',f'{tab_name}_pol.G3', f'{tab_name}.B0', kcross, Xfparang, leakage],
-                gainfield=[primary_calibrator, '', primary_calibrator, primary_calibrator, primary_calibrator, primary_calibrator, primary_calibrator],
-                parang=True, interp='nearest,linearflag,nearest,nearest,nearest,nearest,nearest')
+applycal(vis=obs_vis, field=primary_calibrator, calwt=False, 
+         gaintable=[f'{tab_name}.K0', f'{tab_name}.B0', f'{tab_name}.G2', f'{tab_name}_pol.G3', kcross, Xfparang, leakage],
+         gainfield=[primary_calibrator, primary_calibrator, '', primary_calibrator, primary_calibrator, primary_calibrator, primary_calibrator],
+         parang=True, interp='nearest,linearflag,nearest,nearest,nearest,nearest,nearest')
 
 # Save out a calibrated measurement set
 split(vis=obs_vis, outputvis=f'{tab_name}_calibrated.ms', datacolumn='corrected')
